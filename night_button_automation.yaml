@@ -102,14 +102,13 @@
               data:
                 value: "{{ target_amps }}"
 
+        # Only raise if target is higher AND the current setting has been stable
+        # (not lowered) for 3 minutes, indicating sustained export
         - conditions:
             - condition: template
-              value_template: "{{ target_amps > current_max_amps and target_amps <= cfg_max_current }}"
-            - condition: numeric_state
-              entity_id: sensor.your_power_sensor  # EDIT THIS
-              below: "{{ -(((target_amps * cfg_voltage) * cfg_phases) + cfg_power_buffer) }}"
-              for:
-                minutes: 3  # Raise delay - EDIT THIS
+              value_template: >
+                {{ target_amps > current_max_amps and target_amps <= cfg_max_current
+                   and (as_timestamp(now()) - as_timestamp(states['number.your_max_current_entity'].last_changed)) > 180 }}
           sequence:
             - service: number.set_value
               target:
