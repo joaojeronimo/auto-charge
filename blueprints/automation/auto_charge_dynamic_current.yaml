@@ -1,0 +1,161 @@
+blueprint:
+  name: Auto-Charge Dynamic Current Adjustment
+  description: |
+    Dynamically adjusts EV charging current based on available solar export power.
+    - Lowers current immediately when export drops (responsive)
+    - Raises current only after sustained high export (stable)
+    - Formula: Target Amps = (Exported Power - Buffer) / (Voltage × Phases)
+    - Keeps current between configurable min/max limits
+  domain: automation
+  source_url: https://github.com/yourusername/auto-charge
+  input:
+    power_sensor:
+      name: Power Sensor
+      description: Grid power sensor (should be negative when exporting to grid)
+      selector:
+        entity:
+          domain: sensor
+          device_class: power
+
+    max_current_entity:
+      name: Maximum Current Control
+      description: Number entity that controls the charger's maximum current
+      selector:
+        entity:
+          domain: number
+
+    voltage:
+      name: Grid Voltage
+      description: Your grid voltage (typically 230V or 240V)
+      default: 230
+      selector:
+        number:
+          min: 100
+          max: 250
+          step: 1
+          unit_of_measurement: "V"
+
+    phases:
+      name: Number of Phases
+      description: Number of phases your charger uses (1 for single-phase, 3 for three-phase)
+      default: 1
+      selector:
+        number:
+          min: 1
+          max: 3
+          step: 1
+
+    power_buffer:
+      name: Power Buffer
+      description: Safety buffer to stay below export level (prevents grid import)
+      default: 100
+      selector:
+        number:
+          min: 0
+          max: 1000
+          step: 50
+          unit_of_measurement: "W"
+
+    min_current:
+      name: Minimum Current
+      description: Minimum charging current (usually 0 or 6A depending on charger)
+      default: 0
+      selector:
+        number:
+          min: 0
+          max: 16
+          step: 1
+          unit_of_measurement: "A"
+
+    max_current:
+      name: Maximum Current
+      description: Maximum charging current (typically 16A or 32A)
+      default: 32
+      selector:
+        number:
+          min: 6
+          max: 32
+          step: 1
+          unit_of_measurement: "A"
+
+    adjustment_interval:
+      name: Adjustment Interval
+      description: >
+        How often to check and adjust current. Use /N format for every N seconds
+        (e.g., /20 for every 20 seconds, /30 for every 30 seconds)
+      default: "/20"
+      selector:
+        text:
+
+    raise_delay:
+      name: Raise Delay
+      description: Wait time before raising current (prevents oscillation)
+      default: 3
+      selector:
+        number:
+          min: 1
+          max: 10
+          step: 1
+          unit_of_measurement: "min"
+
+variables:
+  cfg_voltage: !input voltage
+  cfg_phases: !input phases
+  cfg_power_buffer: !input power_buffer
+  cfg_min_current: !input min_current
+  cfg_max_current: !input max_current
+  power_sensor_entity: !input power_sensor
+  max_current_entity_id: !input max_current_entity
+
+trigger:
+  - platform: time_pattern
+    seconds: !input adjustment_interval
+
+condition:
+  - condition: template
+    value_template: >
+      {{ states(power_sensor_entity) not in ['unavailable', 'unknown', 'none']
+         and states(max_current_entity_id) not in ['unavailable', 'unknown', 'none'] }}
+
+action:
+  - variables:
+      power_export: "{{ states(power_sensor_entity) | float(0) }}"
+      current_max_amps: "{{ states(max_current_entity_id) | float(0) }}"
+      target_amps: >
+        {% if power_export < 0 %}
+          {% set available_watts = (power_export | abs) - cfg_power_buffer %}
+          {% set calculated_amps = available_watts / (cfg_voltage * cfg_phases) %}
+          {{ [[calculated_amps, cfg_max_current] | min, cfg_min_current] | max | round(1) }}
+        {% else %}
+          {{ cfg_min_current }}
+        {% endif %}
+
+  - choose:
+      # Case 1: LOWER current immediately (responsive to drops in export)
+      - conditions:
+          - condition: template
+            value_template: "{{ target_amps < current_max_amps and target_amps >= cfg_min_current }}"
+        sequence:
+          - service: number.set_value
+            target:
+              entity_id: !input max_current_entity
+            data:
+              value: "{{ target_amps }}"
+
+      # Case 2: RAISE current (only after sustained high export)
+      - conditions:
+          - condition: template
+            value_template: "{{ target_amps > current_max_amps and target_amps <= cfg_max_current }}"
+          - condition: numeric_state
+            entity_id: !input power_sensor
+            below: "{{ -(((target_amps * cfg_voltage) * cfg_phases) + cfg_power_buffer) }}"
+            for:
+              minutes: !input raise_delay
+        sequence:
+          - service: number.set_value
+            target:
+              entity_id: !input max_current_entity
+            data:
+              value: "{{ target_amps }}"
+
+mode: single

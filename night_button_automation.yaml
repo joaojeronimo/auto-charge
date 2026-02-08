@@ -1,0 +1,119 @@
+# ============================================================================
+# AUTO-CHARGE AUTOMATION CONFIGURATION
+# ============================================================================
+#
+# PURPOSE:
+# 1. Trigger a button during nighttime (10PM-8AM) OR when exporting > 1000W
+# 2. Dynamically adjust charging current based on available solar export:
+#    - Lowers current immediately when export drops
+#    - Raises current only after 3 minutes of sustained high export
+#    - Formula: Target Amps = (Exported Power - Buffer) / (Voltage × Phases)
+#    - Keeps current between 0-32A
+#
+# ============================================================================
+# CONFIGURATION VALUES - Edit these in the automations below
+# ============================================================================
+#
+# ENTITY IDs TO REPLACE:
+#   - sensor.your_power_sensor          -> Your grid power sensor (negative when exporting)
+#   - number.your_max_current_entity    -> Your charger max current control
+#   - button.your_button_name           -> Button to trigger
+#
+# TIMING SETTINGS:
+#   - Night time: 22:00:00 to 08:00:00  (10 PM to 8 AM)
+#   - Check interval: every 20 seconds
+#   - Raise delay: 3 minutes
+#
+# POWER & CURRENT SETTINGS:
+#   - Export threshold: 1000W            (trigger button when exporting > 1000W)
+#   - Voltage: 230V
+#   - Phases: 1                          (set to 3 for three-phase chargers)
+#   - Power buffer: 100W                 (safety margin)
+#   - Current range: 0-32A
+#
+# ============================================================================
+
+- alias: "Night Time or High Export Button Trigger"
+  description: "Triggers a button between 10PM and 8AM OR when exporting > 1000W (30-min cooldown)"
+  variables:
+    cfg_export_threshold: 1000  # Export threshold in Watts - EDIT THIS
+    power_sensor_entity: sensor.your_power_sensor  # EDIT THIS
+  trigger:
+    - platform: time_pattern
+      minutes: "*"
+  condition:
+    # Cooldown: don't re-trigger within 30 minutes
+    - condition: template
+      value_template: >
+        {{ this.attributes.last_triggered is none or
+           (now() - this.attributes.last_triggered).total_seconds() > 1800 }}
+    - condition: or
+      conditions:
+        - condition: time
+          after: "22:00:00"    # Night start - EDIT THIS
+          before: "08:00:00"   # Night end - EDIT THIS
+        - condition: template
+          value_template: >
+            {{ states(power_sensor_entity) | float(0) < (cfg_export_threshold * -1) }}
+  action:
+    - service: button.press
+      target:
+        entity_id: button.your_button_name  # EDIT THIS
+  mode: single
+
+- alias: "Dynamic Current Adjustment Based on Export"
+  description: "Adjusts charging current based on grid export (lower immediately, raise after 3 min)"
+  trigger:
+    - platform: time_pattern
+      seconds: "/20"  # Check every 20 seconds - EDIT THIS
+  condition:
+    - condition: template
+      value_template: >
+        {{ states('sensor.your_power_sensor') not in ['unavailable', 'unknown', 'none']
+           and states('number.your_max_current_entity') not in ['unavailable', 'unknown', 'none'] }}
+  action:
+    - variables:
+        # Configuration constants - EDIT THESE VALUES
+        cfg_voltage: 230         # Grid voltage (V)
+        cfg_phases: 1            # Number of phases (1 or 3)
+        cfg_power_buffer: 100    # Safety buffer (W)
+        cfg_min_current: 0       # Minimum current (A)
+        cfg_max_current: 32      # Maximum current (A)
+        # Read current sensor states - EDIT ENTITY IDs
+        power_export: "{{ states('sensor.your_power_sensor') | float(0) }}"
+        current_max_amps: "{{ states('number.your_max_current_entity') | float(0) }}"
+        # Calculate target amperage
+        target_amps: >
+          {% if power_export < 0 %}
+            {% set available_watts = (power_export | abs) - cfg_power_buffer %}
+            {% set calculated_amps = available_watts / (cfg_voltage * cfg_phases) %}
+            {{ [[calculated_amps, cfg_max_current] | min, cfg_min_current] | max | round(1) }}
+          {% else %}
+            {{ cfg_min_current }}
+          {% endif %}
+    - choose:
+        - conditions:
+            - condition: template
+              value_template: "{{ target_amps < current_max_amps and target_amps >= cfg_min_current }}"
+          sequence:
+            - service: number.set_value
+              target:
+                entity_id: number.your_max_current_entity  # EDIT THIS
+              data:
+                value: "{{ target_amps }}"
+
+        - conditions:
+            - condition: template
+              value_template: "{{ target_amps > current_max_amps and target_amps <= cfg_max_current }}"
+            - condition: numeric_state
+              entity_id: sensor.your_power_sensor  # EDIT THIS
+              below: "{{ -(((target_amps * cfg_voltage) * cfg_phases) + cfg_power_buffer) }}"
+              for:
+                minutes: 3  # Raise delay - EDIT THIS
+          sequence:
+            - service: number.set_value
+              target:
+                entity_id: number.your_max_current_entity  # EDIT THIS
+              data:
+                value: "{{ target_amps }}"
+  mode: single

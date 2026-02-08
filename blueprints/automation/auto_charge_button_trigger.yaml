@@ -1,0 +1,78 @@
+blueprint:
+  name: Auto-Charge Button Trigger
+  description: |
+    Triggers a button during nighttime hours OR when exporting significant power to the grid.
+    Perfect for starting charging when there's excess solar power or during off-peak hours.
+    Includes a 30-minute cooldown to prevent excessive button presses.
+  domain: automation
+  source_url: https://github.com/yourusername/auto-charge
+  input:
+    button_entity:
+      name: Button to Trigger
+      description: The button entity to press when conditions are met
+      selector:
+        entity:
+          domain: button
+
+    power_sensor:
+      name: Power Sensor
+      description: Grid power sensor (should be negative when exporting to grid)
+      selector:
+        entity:
+          domain: sensor
+          device_class: power
+
+    export_threshold:
+      name: Export Threshold
+      description: Minimum export power to trigger (in Watts, positive number)
+      default: 1000
+      selector:
+        number:
+          min: 0
+          max: 10000
+          step: 100
+          unit_of_measurement: "W"
+
+    night_start:
+      name: Night Start Time
+      description: Start of night time period
+      default: "22:00:00"
+      selector:
+        time:
+
+    night_end:
+      name: Night End Time
+      description: End of night time period
+      default: "08:00:00"
+      selector:
+        time:
+
+variables:
+  cfg_export_threshold: !input export_threshold
+  power_sensor_entity: !input power_sensor
+
+trigger:
+  - platform: time_pattern
+    minutes: "*"
+
+condition:
+  # Cooldown: don't re-trigger within 30 minutes
+  - condition: template
+    value_template: >
+      {{ this.attributes.last_triggered is none or
+         (now() - this.attributes.last_triggered).total_seconds() > 1800 }}
+  - condition: or
+    conditions:
+      - condition: time
+        after: !input night_start
+        before: !input night_end
+      - condition: template
+        value_template: >
+          {{ states(power_sensor_entity) | float(0) < (cfg_export_threshold * -1) }}
+
+action:
+  - service: button.press
+    target:
+      entity_id: !input button_entity
+
+mode: single
