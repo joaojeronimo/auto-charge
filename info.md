@@ -11,13 +11,12 @@ This package contains **two automation blueprints**:
 
 ### Quick Start
 
-After installation:
-
-1. Go to **Settings** → **Automations & Scenes**
-2. Click **"Create Automation"** → **"Use a Blueprint"**
-3. Look for **"Auto-Charge"** blueprints
-4. Configure with your entities and preferences
-5. Save and enable!
+1. Go to **Settings** → **Automations & Scenes** → **Blueprints**
+2. Click **"Import Blueprint"** and paste the blueprint URL from the repository
+3. Click **"Create Automation"** → **"Use a Blueprint"**
+4. Look for **"Auto-Charge"** blueprints
+5. Configure with your entities and preferences
+6. Save and enable!
 
 ### Key Features
 

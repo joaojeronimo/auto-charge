@@ -1,36 +1,32 @@
 # Installation Guide
 
-## Method 1: HACS (Recommended)
+## Method 1: Blueprint Import (Recommended)
 
 ### Prerequisites
 - Home Assistant installed and running
-- HACS (Home Assistant Community Store) installed
-  - If not installed, see: https://hacs.xyz/docs/setup/download
 
 ### Steps
 
-1. **Open HACS**
-   - Go to Home Assistant sidebar → **HACS**
+1. **Open Blueprints**
+   - Go to **Settings** → **Automations & Scenes** → **Blueprints**
 
-2. **Add Custom Repository** (if not in default HACS)
-   - Click the three dots menu (⋮) in the top right
-   - Select **"Custom repositories"**
-   - Add repository URL: `https://github.com/yourusername/auto-charge`
-   - Category: **Automation**
-   - Click **"Add"**
+2. **Import Button Trigger Blueprint**
+   - Click **"Import Blueprint"** (bottom right)
+   - Paste the URL:
+     ```
+     https://github.com/yourusername/auto-charge/blob/main/blueprints/automation/auto_charge_button_trigger.yaml
+     ```
+   - Click **"Preview"** then **"Import"**
 
-3. **Install Auto-Charge**
-   - Go to HACS → **Automation** tab
-   - Click **"Explore & Download Repositories"** (+)
-   - Search for **"Auto-Charge"**
-   - Click **"Download"**
-   - Click **"Download"** again to confirm
+3. **Import Dynamic Current Blueprint**
+   - Click **"Import Blueprint"** again
+   - Paste the URL:
+     ```
+     https://github.com/yourusername/auto-charge/blob/main/blueprints/automation/auto_charge_dynamic_current.yaml
+     ```
+   - Click **"Preview"** then **"Import"**
 
-4. **Restart Home Assistant**
-   - Go to **Settings** → **System**
-   - Click **"Restart"** (or use Developer Tools → YAML → Restart)
-
-5. **Verify Installation**
+4. **Verify Installation**
    - Go to **Settings** → **Automations & Scenes**
    - Click **"Create Automation"** → **"Use a Blueprint"**
    - You should see **"Auto-Charge Button Trigger"** and **"Auto-Charge Dynamic Current Adjustment"**
@@ -66,7 +62,7 @@
    - Or restart Home Assistant
 
 5. **Verify Installation**
-   - Same as HACS method step 5
+   - Same as Method 1 step 4
 
 ## Next Steps
 
@@ -119,11 +115,11 @@ After installation, proceed to configure your automations:
 
 ## Updating
 
-### HACS Update
-1. Go to **HACS** → **Automation**
-2. Find **"Auto-Charge"**
-3. If update available, click **"Update"**
-4. Restart Home Assistant
+### Blueprint Import Update
+1. Go to **Settings** → **Automations & Scenes** → **Blueprints**
+2. Find the Auto-Charge blueprints
+3. If an update is available, a notification will appear
+4. Click to update — existing automations will use the new version automatically
 
 ### Manual Update
 1. Download latest blueprint files

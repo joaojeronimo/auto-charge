@@ -18,14 +18,14 @@ Intelligently adjusts charging current in real-time:
 
 ## Installation
 
-### Option 1: Via HACS (Recommended)
+### Option 1: Blueprint Import (Recommended)
 
-1. Open HACS in Home Assistant
-2. Go to "Automation" tab
-3. Click the "+" button
-4. Search for "Auto-Charge"
-5. Click "Download"
-6. Restart Home Assistant
+1. Go to **Settings** → **Automations & Scenes** → **Blueprints**
+2. Click **"Import Blueprint"** (bottom right)
+3. Paste the URL for each blueprint:
+   - Button Trigger: `https://github.com/yourusername/auto-charge/blob/main/blueprints/automation/auto_charge_button_trigger.yaml`
+   - Dynamic Current: `https://github.com/yourusername/auto-charge/blob/main/blueprints/automation/auto_charge_dynamic_current.yaml`
+4. Click **"Preview"** then **"Import"**
 
 ### Option 2: Manual Installation
 
@@ -37,7 +37,6 @@ Intelligently adjusts charging current in real-time:
    ```
    config/blueprints/automation/auto-charge/
    ```
-   Note: Blueprint files should be in the `blueprints/automation/` subdirectory.
 
 3. Restart Home Assistant or reload automations
 
