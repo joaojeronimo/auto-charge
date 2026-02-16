@@ -122,6 +122,7 @@ action:
   - variables:
       power_export: "{{ states(power_sensor_entity) | float(0) }}"
       current_max_amps: "{{ states(max_current_entity_id) | float(0) }}"
+  - variables:
       target_amps: >
         {% if power_export < 0 %}
           {% set available_watts = (power_export | abs) - cfg_power_buffer %}
