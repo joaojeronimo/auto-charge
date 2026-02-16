@@ -62,8 +62,8 @@ blueprint:
       default: 100
       selector:
         number:
-          min: 0
-          max: 1000
+          min: 400
+          max: 2000
           step: 50
           unit_of_measurement: "W"
 
@@ -74,7 +74,7 @@ blueprint:
       selector:
         number:
           min: 0
-          max: 16
+          max: 4
           step: 1
           unit_of_measurement: "A"
 
@@ -112,7 +112,8 @@ variables:
   max_current_entity_id: !input max_current_entity
 
 trigger:
-  - platform: time_pattern
+  - id: "adjust_current"
+    platform: time_pattern
     seconds: "/20"
 
 condition:
