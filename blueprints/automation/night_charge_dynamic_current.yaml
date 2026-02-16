@@ -1,0 +1,162 @@
+blueprint:
+  name: Nightly Charge Dynamic Current
+  description: |
+    Dynamically adjusts EV charging current to keep total grid import below a configurable limit.
+    - Lowers current immediately when import exceeds limit (responsive)
+    - Raises current only after sustained low import (stable)
+    - Formula: Target Amps = Current Amps + (Max Import - Actual Import - Buffer) / (Voltage × Phases)
+    - Keeps current between configurable min/max limits
+  domain: automation
+  source_url: https://github.com/yourusername/auto-charge
+  input:
+    power_sensor:
+      name: Power Sensor
+      description: Grid power sensor (positive when importing from grid)
+      selector:
+        entity:
+          domain: sensor
+          device_class: power
+
+    max_current_entity:
+      name: Maximum Current Control
+      description: Number entity that controls the charger's maximum current
+      selector:
+        entity:
+          domain: number
+
+    max_import_power:
+      name: Maximum Import Power
+      description: Maximum allowed grid import power (in Watts)
+      default: 3000
+      selector:
+        number:
+          min: 500
+          max: 15000
+          step: 100
+          unit_of_measurement: "W"
+
+    voltage:
+      name: Grid Voltage
+      description: Your grid voltage (typically 230V or 240V)
+      default: 230
+      selector:
+        number:
+          min: 100
+          max: 250
+          step: 1
+          unit_of_measurement: "V"
+
+    phases:
+      name: Number of Phases
+      description: Number of phases your charger uses (1 for single-phase, 3 for three-phase)
+      default: 1
+      selector:
+        number:
+          min: 1
+          max: 3
+          step: 1
+
+    power_buffer:
+      name: Power Buffer
+      description: Safety buffer to stay below import limit (prevents exceeding limit)
+      default: 100
+      selector:
+        number:
+          min: 0
+          max: 1000
+          step: 50
+          unit_of_measurement: "W"
+
+    min_current:
+      name: Minimum Current
+      description: Minimum charging current (usually 0 or 6A depending on charger)
+      default: 0
+      selector:
+        number:
+          min: 0
+          max: 16
+          step: 1
+          unit_of_measurement: "A"
+
+    max_current:
+      name: Maximum Current
+      description: Maximum charging current (typically 16A or 32A)
+      default: 32
+      selector:
+        number:
+          min: 6
+          max: 32
+          step: 1
+          unit_of_measurement: "A"
+
+    raise_delay:
+      name: Raise Delay
+      description: Wait time before raising current (prevents oscillation)
+      default: 3
+      selector:
+        number:
+          min: 1
+          max: 10
+          step: 1
+          unit_of_measurement: "min"
+
+variables:
+  cfg_max_import_power: !input max_import_power
+  cfg_voltage: !input voltage
+  cfg_phases: !input phases
+  cfg_power_buffer: !input power_buffer
+  cfg_min_current: !input min_current
+  cfg_max_current: !input max_current
+  cfg_raise_delay: !input raise_delay
+  power_sensor_entity: !input power_sensor
+  max_current_entity_id: !input max_current_entity
+
+trigger:
+  - platform: time_pattern
+    seconds: "/20"
+
+condition:
+  - condition: template
+    value_template: >
+      {{ states(power_sensor_entity) not in ['unavailable', 'unknown', 'none']
+         and states(max_current_entity_id) not in ['unavailable', 'unknown', 'none'] }}
+
+action:
+  - variables:
+      power_import: "{{ states(power_sensor_entity) | float(0) }}"
+      current_max_amps: "{{ states(max_current_entity_id) | float(0) }}"
+  - variables:
+      target_amps: >
+        {% set power_import = power_import | float(0) %}
+        {% set current_max_amps = current_max_amps | float(0) %}
+        {% set headroom_watts = cfg_max_import_power - power_import - cfg_power_buffer %}
+        {% set adjustment_amps = headroom_watts / (cfg_voltage * cfg_phases) %}
+        {% set target = current_max_amps + adjustment_amps %}
+        {{ [[target, cfg_max_current] | min, cfg_min_current] | max | round(1) }}
+
+  - choose:
+      # Case 1: LOWER current immediately (responsive to import spikes)
+      - conditions:
+          - condition: template
+            value_template: "{{ target_amps | float < current_max_amps | float and target_amps | float >= cfg_min_current }}"
+        sequence:
+          - service: number.set_value
+            target:
+              entity_id: !input max_current_entity
+            data:
+              value: "{{ target_amps }}"
+
+      # Case 2: RAISE current (only after sustained low import)
+      - conditions:
+          - condition: template
+            value_template: >
+              {{ target_amps | float > current_max_amps | float and target_amps | float <= cfg_max_current
+                 and (as_timestamp(now()) - as_timestamp(states[max_current_entity_id].last_changed)) > (cfg_raise_delay * 60) }}
+        sequence:
+          - service: number.set_value
+            target:
+              entity_id: !input max_current_entity
+            data:
+              value: "{{ target_amps }}"
+
+mode: single
