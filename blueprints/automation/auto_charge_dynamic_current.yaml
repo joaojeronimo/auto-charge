@@ -78,24 +78,6 @@ blueprint:
           step: 1
           unit_of_measurement: "A"
 
-    adjustment_interval:
-      name: Adjustment Interval
-      description: How often to check and adjust current
-      default: "/20"
-      selector:
-        select:
-          options:
-            - label: "Every 10 seconds"
-              value: "/10"
-            - label: "Every 15 seconds"
-              value: "/15"
-            - label: "Every 20 seconds"
-              value: "/20"
-            - label: "Every 30 seconds"
-              value: "/30"
-            - label: "Every 60 seconds"
-              value: "/60"
-
     raise_delay:
       name: Raise Delay
       description: Wait time before raising current (prevents oscillation)
@@ -119,9 +101,7 @@ variables:
 
 trigger:
   - platform: time_pattern
-    hours: "*"
-    minutes: "*"
-    seconds: !input adjustment_interval
+    seconds: "/20"
 
 condition:
   - condition: template
