@@ -4,7 +4,7 @@ blueprint:
     Dynamically adjusts EV charging current to keep total grid import below a configurable limit.
     - Lowers current immediately when import exceeds limit
     - Raises current only after sustained headroom (configurable delay)
-    - Formula: Target Amps = Current Amps + (Max Import - Actual Import - Buffer) / (Voltage × Phases)
+    - Formula: Target Amps = (Max Import - Actual Import - Buffer) / (Voltage × Phases)
     - Keeps current between configurable min/max limits
   domain: automation
   source_url: https://github.com/yourusername/auto-charge
@@ -146,11 +146,9 @@ action:
   - variables:
       target_amps: >
         {% set power_import = power_import | float(0) %}
-        {% set current_max_amps = current_max_amps | float(0) %}
-        {% set headroom_watts = cfg_max_import_power - power_import - cfg_power_buffer %}
-        {% set adjustment_amps = headroom_watts / (cfg_voltage * cfg_phases) %}
-        {% set target = current_max_amps + adjustment_amps %}
-        {{ [[target, cfg_max_current] | min, cfg_min_current] | max | int }}
+        {% set available_watts = cfg_max_import_power - power_import - cfg_power_buffer %}
+        {% set target = (available_watts / (cfg_voltage * cfg_phases)) | int %}
+        {{ [[target, cfg_max_current] | min, cfg_min_current] | max }}
 
   - choose:
       # LOWER immediately when over the import limit
