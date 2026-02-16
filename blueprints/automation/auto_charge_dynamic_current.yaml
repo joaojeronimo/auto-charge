@@ -119,6 +119,8 @@ variables:
 
 trigger:
   - platform: time_pattern
+    hours: "*"
+    minutes: "*"
     seconds: !input adjustment_interval
 
 condition:
