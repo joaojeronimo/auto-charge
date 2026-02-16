@@ -115,6 +115,7 @@ action:
       current_max_amps: "{{ states(max_current_entity_id) | float(0) }}"
   - variables:
       target_amps: >
+        {% set power_export = power_export | float(0) %}
         {% if power_export < 0 %}
           {% set available_watts = (power_export | abs) - cfg_power_buffer %}
           {% set calculated_amps = available_watts / (cfg_voltage * cfg_phases) %}
@@ -127,7 +128,7 @@ action:
       # Case 1: LOWER current immediately (responsive to drops in export)
       - conditions:
           - condition: template
-            value_template: "{{ target_amps < current_max_amps and target_amps >= cfg_min_current }}"
+            value_template: "{{ target_amps | float < current_max_amps | float and target_amps | float >= cfg_min_current }}"
         sequence:
           - service: number.set_value
             target:
@@ -141,7 +142,7 @@ action:
       - conditions:
           - condition: template
             value_template: >
-              {{ target_amps > current_max_amps and target_amps <= cfg_max_current
+              {{ target_amps | float > current_max_amps | float and target_amps | float <= cfg_max_current
                  and (as_timestamp(now()) - as_timestamp(states[max_current_entity_id].last_changed)) > (cfg_raise_delay * 60) }}
         sequence:
           - service: number.set_value
