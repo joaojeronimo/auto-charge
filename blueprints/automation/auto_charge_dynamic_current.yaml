@@ -89,6 +89,20 @@ blueprint:
           step: 1
           unit_of_measurement: "min"
 
+    schedule_start:
+      name: Schedule Start Time
+      description: Start time for charging window
+      default: "09:00:00"
+      selector:
+        time:
+
+    schedule_end:
+      name: Schedule End Time
+      description: End time for charging window
+      default: "22:00:00"
+      selector:
+        time:
+
 variables:
   cfg_voltage: !input voltage
   cfg_phases: !input phases
@@ -104,6 +118,9 @@ trigger:
     seconds: "/20"
 
 condition:
+  - condition: time
+    after: !input schedule_start
+    before: !input schedule_end
   - condition: template
     value_template: >
       {{ states(power_sensor_entity) not in ['unavailable', 'unknown', 'none']
