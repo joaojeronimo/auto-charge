@@ -2,8 +2,8 @@ blueprint:
   name: Nightly Charge Dynamic Current
   description: |
     Dynamically adjusts EV charging current to keep total grid import below a configurable limit.
-    - Lowers current immediately when import exceeds limit (responsive)
-    - Raises current only after sustained low import (stable)
+    - Lowers current immediately when import exceeds limit
+    - Raises current only after sustained headroom (configurable delay)
     - Formula: Target Amps = Current Amps + (Max Import - Actual Import - Buffer) / (Voltage × Phases)
     - Keeps current between configurable min/max limits
   domain: automation
@@ -91,7 +91,7 @@ blueprint:
 
     raise_delay:
       name: Raise Delay
-      description: Wait time before raising current (prevents oscillation)
+      description: Wait time before raising current (prevents reacting to temporary drops in import)
       default: 3
       selector:
         number:
@@ -133,13 +133,13 @@ action:
         {% set headroom_watts = cfg_max_import_power - power_import - cfg_power_buffer %}
         {% set adjustment_amps = headroom_watts / (cfg_voltage * cfg_phases) %}
         {% set target = current_max_amps + adjustment_amps %}
-        {{ [[target, cfg_max_current] | min, cfg_min_current] | max | round(1) }}
+        {{ [[target, cfg_max_current] | min, cfg_min_current] | max | int }}
 
   - choose:
-      # Case 1: LOWER current immediately (responsive to import spikes)
+      # LOWER immediately when over the import limit
       - conditions:
           - condition: template
-            value_template: "{{ target_amps | float < current_max_amps | float and target_amps | float >= cfg_min_current }}"
+            value_template: "{{ target_amps | int < current_max_amps | int }}"
         sequence:
           - service: number.set_value
             target:
@@ -147,11 +147,11 @@ action:
             data:
               value: "{{ target_amps }}"
 
-      # Case 2: RAISE current (only after sustained low import)
+      # RAISE only after sustained headroom (raise_delay minutes since last change)
       - conditions:
           - condition: template
             value_template: >
-              {{ target_amps | float > current_max_amps | float and target_amps | float <= cfg_max_current
+              {{ target_amps | int > current_max_amps | int
                  and (as_timestamp(now()) - as_timestamp(states[max_current_entity_id].last_changed)) > (cfg_raise_delay * 60) }}
         sequence:
           - service: number.set_value
