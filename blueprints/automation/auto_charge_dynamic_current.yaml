@@ -80,12 +80,21 @@ blueprint:
 
     adjustment_interval:
       name: Adjustment Interval
-      description: >
-        How often to check and adjust current. Use /N format for every N seconds
-        (e.g., /20 for every 20 seconds, /30 for every 30 seconds)
+      description: How often to check and adjust current
       default: "/20"
       selector:
-        text:
+        select:
+          options:
+            - label: "Every 10 seconds"
+              value: "/10"
+            - label: "Every 15 seconds"
+              value: "/15"
+            - label: "Every 20 seconds"
+              value: "/20"
+            - label: "Every 30 seconds"
+              value: "/30"
+            - label: "Every 60 seconds"
+              value: "/60"
 
     raise_delay:
       name: Raise Delay
