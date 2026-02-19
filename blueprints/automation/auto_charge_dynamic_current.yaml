@@ -135,8 +135,8 @@ action:
         {% set power_export = power_export | float(0) %}
         {% if power_export < 0 %}
           {% set available_watts = (power_export | abs) - cfg_power_buffer %}
-          {% set calculated_amps = available_watts / (cfg_voltage * cfg_phases) %}
-          {{ [[calculated_amps, cfg_max_current] | min, cfg_min_current] | max | round(1) }}
+          {% set calculated_amps = (available_watts / (cfg_voltage * cfg_phases)) | int %}
+          {{ [[calculated_amps, cfg_max_current] | min, cfg_min_current] | max | int }}
         {% else %}
           {{ cfg_min_current }}
         {% endif %}
@@ -145,7 +145,7 @@ action:
       # Case 1: LOWER current immediately (responsive to drops in export)
       - conditions:
           - condition: template
-            value_template: "{{ target_amps | float < current_max_amps | float and target_amps | float >= cfg_min_current }}"
+            value_template: "{{ target_amps | int < current_max_amps | int }}"
         sequence:
           - service: number.set_value
             target:
@@ -159,7 +159,7 @@ action:
       - conditions:
           - condition: template
             value_template: >
-              {{ target_amps | float > current_max_amps | float and target_amps | float <= cfg_max_current
+              {{ target_amps | int > current_max_amps | int
                  and (as_timestamp(now()) - as_timestamp(states[max_current_entity_id].last_changed)) > (cfg_raise_delay * 60) }}
         sequence:
           - service: number.set_value
