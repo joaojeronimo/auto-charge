@@ -146,7 +146,9 @@ action:
   - variables:
       target_amps: >
         {% set power_import = power_import | float(0) %}
-        {% set available_watts = cfg_max_import_power - power_import - cfg_power_buffer %}
+        {% set charger_draw = current_max_amps | float(0) * cfg_voltage * cfg_phases %}
+        {% set base_load = [power_import - charger_draw, 0] | max %}
+        {% set available_watts = cfg_max_import_power - base_load - cfg_power_buffer %}
         {% set target = (available_watts / (cfg_voltage * cfg_phases)) | int %}
         {{ [[target, cfg_max_current] | min, cfg_min_current] | max }}
 
