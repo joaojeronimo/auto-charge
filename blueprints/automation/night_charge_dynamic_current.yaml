@@ -107,6 +107,13 @@ blueprint:
       selector:
         time:
 
+    enable_switch:
+      name: Night Charge Enable Switch
+      description: Toggle switch to enable/disable night charging (input_boolean)
+      selector:
+        entity:
+          domain: input_boolean
+
     schedule_end:
       name: Schedule End Time
       description: End time for nightly charging window
@@ -124,6 +131,7 @@ variables:
   cfg_raise_delay: !input raise_delay
   power_sensor_entity: !input power_sensor
   max_current_entity_id: !input max_current_entity
+  enable_switch_entity: !input enable_switch
 
 trigger:
   - id: "adjust_current"
@@ -131,6 +139,8 @@ trigger:
     seconds: "/20"
 
 condition:
+  - condition: template
+    value_template: "{{ states(enable_switch_entity) == 'on' }}"
   - condition: time
     after: !input schedule_start
     before: !input schedule_end
