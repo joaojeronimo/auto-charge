@@ -2,200 +2,204 @@
 
 This document provides example configurations for common setups.
 
-## Example 1: Single-Phase Solar Setup (230V, 16A Max)
+## Solar Dynamic Current Examples
 
-### Scenario
-- Single-phase home with solar panels
-- 16A charger (e.g., portable EVSE)
-- Grid power sensor shows negative when exporting
-- Want to charge during night or when excess solar available
+These examples use the **Auto-Charge Dynamic Current Adjustment** blueprint for daytime solar charging.
 
-### Button Trigger Configuration
+### Example 1: Single-Phase Solar Setup (230V, 16A Max)
+
+**Scenario:** Single-phase home with solar panels, 16A portable EVSE, conservative approach.
+
 ```yaml
-Button Entity: button.mycharger_start
-Power Sensor: sensor.home_grid_power
-Export Threshold: 1500  # ~6.5A × 230V
-Night Start: 22:00:00
-Night End: 08:00:00
-```
-
-### Dynamic Current Configuration
-```yaml
-Power Sensor: sensor.home_grid_power
+Power Sensor: sensor.home_grid_power          # Negative when exporting
 Max Current Entity: number.mycharger_max_current
 Voltage: 230
-Phases: 1          # Single-phase
-Power Buffer: 150  # Conservative buffer
-Min Current: 6     # Typical minimum for most chargers
-Max Current: 16    # Single-phase max
-Adjustment Interval: 30  # Check every 30 seconds
-Raise Delay: 5     # Wait 5 minutes before raising
+Phases: 1
+Power Buffer: 150    # Conservative buffer
+Min Current: 6       # Typical minimum for most chargers
+Max Current: 16      # Single-phase max
+Raise Delay: 5       # Wait 5 minutes before raising
+Schedule Start: 09:00:00
+Schedule End: 22:00:00
 ```
 
-**Result:** Charger starts at night or when exporting >1.5kW, adjusts current to match available solar.
+**How it calculates** (at 3000W export, currently charging at 6A):
+- Charger draw = 6 x 230 = 1380W
+- Available = 3000 + 1380 - 150 = 4230W
+- Target = 4230 / 230 = **18A** (clamped to 16A max)
 
 ---
 
-## Example 2: Three-Phase Solar Setup (230V, 32A Max)
+### Example 2: Three-Phase Solar Setup (230V, 32A Max)
 
-### Scenario
-- Three-phase home with large solar array
-- 32A three-phase charger (e.g., wall-mounted)
-- High solar production during day
-- Want aggressive solar tracking
+**Scenario:** Three-phase home with large solar array, wall-mounted 32A charger, aggressive tracking.
 
-### Button Trigger Configuration
-```yaml
-Button Entity: button.wallbox_start
-Power Sensor: sensor.solar_net_power
-Export Threshold: 2000  # ~8.7A × 230V
-Night Start: 23:00:00
-Night End: 07:00:00
-```
-
-### Dynamic Current Configuration
 ```yaml
 Power Sensor: sensor.solar_net_power
 Max Current Entity: number.wallbox_max_current
 Voltage: 230
-Phases: 3            # Three-phase charger
-Power Buffer: 100   # Tight buffer for good tracking
-Min Current: 0      # Can stop charging if needed
-Max Current: 32     # Three-phase max
-Adjustment Interval: 20  # Fast response
-Raise Delay: 3      # Standard raise delay
+Phases: 3
+Power Buffer: 100    # Tight buffer for good tracking
+Min Current: 0       # Can stop charging if needed
+Max Current: 32      # Three-phase max
+Raise Delay: 3       # Standard raise delay
+Schedule Start: 08:00:00
+Schedule End: 20:00:00
 ```
 
-**Result:** Fast response to solar changes, charges up to 32A when sufficient solar available.
+**How it calculates** (at 5000W export, currently charging at 10A):
+- Charger draw = 10 x 230 x 3 = 6900W
+- Available = 5000 + 6900 - 100 = 11800W
+- Target = 11800 / (230 x 3) = **17A**
 
 ---
 
-## Example 3: Time-of-Use Optimization
+### Example 3: Conservative Solar-Only (Avoid Grid Import)
 
-### Scenario
-- Time-of-use electricity rates
-- Solar panels with moderate production
-- Want to prioritize solar, fallback to cheap night rate
-- Don't want to import during peak hours
+**Scenario:** Only charge on excess solar, never import. Battery storage system, very sensitive to imports.
 
-### Button Trigger Configuration
-```yaml
-Button Entity: button.charger_remote_start
-Power Sensor: sensor.grid_import_export
-Export Threshold: 1000
-Night Start: 22:00:00  # When cheap rate starts
-Night End: 06:00:00    # When cheap rate ends
-```
-
-### Dynamic Current Configuration
-```yaml
-Power Sensor: sensor.grid_import_export
-Max Current Entity: number.charger_charging_current
-Voltage: 240   # 240V region
-Phases: 1      # Single-phase
-Power Buffer: 200  # Larger buffer to avoid any import
-Min Current: 6
-Max Current: 32
-Adjustment Interval: 20
-Raise Delay: 5  # Conservative, avoid import during peak
-```
-
-**Result:** Charges on solar during day, switches to full power during cheap night rates.
-
----
-
-## Example 4: Conservative Setup (Avoid Grid Import)
-
-### Scenario
-- Want to charge ONLY on excess solar
-- Never import from grid for charging
-- Have battery storage system
-- Very sensitive to grid import
-
-### Button Trigger Configuration
-```yaml
-Button Entity: button.ev_charger_start
-Power Sensor: sensor.battery_grid_power
-Export Threshold: 2000  # High threshold
-Night Start: 23:00:00
-Night End: 23:01:00  # Effectively disabled (1 min window)
-```
-
-### Dynamic Current Configuration
 ```yaml
 Power Sensor: sensor.battery_grid_power
 Max Current Entity: number.ev_max_current
 Voltage: 230
-Phases: 1            # Single-phase
-Power Buffer: 500   # Very large buffer!
-Min Current: 0      # Will stop if not enough export
+Phases: 1
+Power Buffer: 500    # Very large buffer!
+Min Current: 0       # Will stop if not enough export
 Max Current: 32
-Adjustment Interval: 15  # Fast response to avoid import
-Raise Delay: 10     # Very conservative, wait 10 min
+Raise Delay: 10      # Very conservative, wait 10 min
+Schedule Start: 08:00:00
+Schedule End: 18:00:00
 ```
 
-**Result:** Only charges on significant solar excess, very unlikely to import from grid.
+**How it calculates** (at 2000W export, currently charging at 6A):
+- Charger draw = 6 x 230 = 1380W
+- Available = 2000 + 1380 - 500 = 2880W
+- Target = 2880 / 230 = **12A**
 
 ---
 
-## Example 5: Aggressive Solar Tracking
+### Example 4: Aggressive Solar Tracking
 
-### Scenario
-- Large solar array
-- Want to use every bit of excess
-- Don't mind occasional small imports
-- Battery storage to handle fluctuations
+**Scenario:** Large solar array, want to use every bit of excess, don't mind occasional small imports.
 
-### Button Trigger Configuration
-```yaml
-Button Entity: button.tesla_charger_start
-Power Sensor: sensor.powerwall_grid_power
-Export Threshold: 500  # Very sensitive
-Night Start: 01:00:00  # Small night window
-Night End: 05:00:00
-```
-
-### Dynamic Current Configuration
 ```yaml
 Power Sensor: sensor.powerwall_grid_power
 Max Current Entity: number.tesla_current_limit
 Voltage: 240
-Phases: 1            # Single-phase
-Power Buffer: 50    # Minimal buffer
-Min Current: 6
+Phases: 1
+Power Buffer: 50     # Minimal buffer
+Min Current: 6       # Keep charging active
 Max Current: 32
-Adjustment Interval: 10  # Very responsive
-Raise Delay: 2      # Quick to raise
+Raise Delay: 2       # Quick to raise
+Schedule Start: 07:00:00
+Schedule End: 21:00:00
 ```
 
-**Result:** Tracks solar aggressively, starts charging with minimal excess, adjusts quickly.
+---
+
+## Nightly Charge Examples
+
+These examples use the **Nightly Charge Dynamic Current** blueprint for overnight charging within a grid import limit. All require an `input_boolean` helper for the enable switch.
+
+### Example 5: Standard Night Charge (3kW Import Limit)
+
+**Scenario:** Cheap overnight rate, 3kW import limit to avoid breaker trips, single-phase.
+
+```yaml
+Power Sensor: sensor.grid_power               # Positive when importing
+Max Current Entity: number.charger_charging_current
+Night Charge Enable Switch: input_boolean.night_charge_enable
+Maximum Import Power: 3000
+Voltage: 230
+Phases: 1
+Power Buffer: 400    # Safety margin below limit
+Min Current: 0
+Max Current: 16
+Raise Delay: 3
+Schedule Start: 22:00:00
+Schedule End: 06:00:00
+```
+
+**How it calculates** (at 800W household load, currently charging at 6A):
+- Charger draw = 6 x 230 = 1380W
+- Total import = 800 + 1380 = 2180W (what the sensor reads)
+- Base load = 2180 - 1380 = 800W
+- Available = 3000 - 800 - 400 = 1800W
+- Target = 1800 / 230 = **7A**
+
+---
+
+### Example 6: High-Power Night Charge (7kW Import Limit)
+
+**Scenario:** Higher import allowance, three-phase charger, want to charge as fast as possible overnight.
+
+```yaml
+Power Sensor: sensor.grid_import_power
+Max Current Entity: number.wallbox_max_current
+Night Charge Enable Switch: input_boolean.night_charge_enable
+Maximum Import Power: 7000
+Voltage: 230
+Phases: 1
+Power Buffer: 500
+Min Current: 6
+Max Current: 32
+Raise Delay: 3
+Schedule Start: 23:00:00
+Schedule End: 07:00:00
+```
+
+**How it calculates** (at 1000W household load, currently charging at 16A):
+- Charger draw = 16 x 230 = 3680W
+- Total import = 1000 + 3680 = 4680W (what the sensor reads)
+- Base load = 4680 - 3680 = 1000W
+- Available = 7000 - 1000 - 500 = 5500W
+- Target = 5500 / 230 = **23A**
+
+---
+
+### Example 7: Conservative Night Charge (Low Import Limit)
+
+**Scenario:** Shared building supply, must keep total import very low, slow charging acceptable.
+
+```yaml
+Power Sensor: sensor.apartment_grid_power
+Max Current Entity: number.ev_max_current
+Night Charge Enable Switch: input_boolean.night_charge_enable
+Maximum Import Power: 2000
+Voltage: 230
+Phases: 1
+Power Buffer: 500
+Min Current: 0
+Max Current: 10
+Raise Delay: 5
+Schedule Start: 00:00:00
+Schedule End: 06:00:00
+```
 
 ---
 
 ## Sensor Requirements
 
 Your power sensor should:
-- Show **negative values** when exporting to grid
-- Show **positive values** when importing from grid
+- Show **negative values** when exporting to grid (for solar blueprint)
+- Show **positive values** when importing from grid (used by both blueprints)
 - Update frequently (every few seconds ideally)
 - Be reliable (not frequently unavailable)
 
 ### Common Sensor Entity IDs
-
-**Solar Inverters:**
-- `sensor.inverter_power`
-- `sensor.solar_export_power`
-- `sensor.pv_power`
 
 **Smart Meters:**
 - `sensor.grid_power`
 - `sensor.home_power_import_export`
 - `sensor.electricity_meter_power`
 
+**Solar Inverters:**
+- `sensor.inverter_power`
+- `sensor.solar_export_power`
+
 **Battery Systems:**
 - `sensor.powerwall_grid_power`
 - `sensor.battery_grid_power`
-- `sensor.grid_feed_in`
 
 ### Testing Your Sensor
 
@@ -210,27 +214,32 @@ When balanced: sensor should show near 0
 
 ## Troubleshooting Common Configs
 
-### Problem: Charges at night but not on solar
+### Problem: Solar charging stuck at low amps despite high export
 
 **Check:**
-- Export threshold too high
-- Power sensor not showing negative when exporting
-- Button trigger working but current adjustment not configured
+- The formula accounts for current charger draw. If the target seems low, check that the power sensor is reading correctly.
+- Raise delay may be preventing the increase — wait for the configured delay period.
+- Check automation traces to see calculated `target_amps` vs `current_max_amps`.
 
-### Problem: Too much grid import
+### Problem: Too much grid import during solar charging
 
 **Fix:**
 - Increase Power Buffer (try 300-500W)
-- Increase Adjustment Interval (slower response)
 - Increase Raise Delay (more conservative raising)
 
 ### Problem: Not using enough solar
 
 **Fix:**
 - Decrease Power Buffer (try 50-100W)
-- Decrease Export Threshold
 - Decrease Raise Delay (faster raising)
-- Decrease Adjustment Interval (faster response)
+- Decrease Min Current to 0 if your charger supports it
+
+### Problem: Night charging not activating
+
+**Check:**
+- Is the **enable switch** (`input_boolean`) turned ON?
+- Is the current time within the schedule window?
+- Is `max_import_power` set high enough? If base load exceeds the limit, target will be 0.
 
 ### Problem: Charging stops and starts frequently
 
@@ -243,29 +252,34 @@ When balanced: sensor should show near 0
 
 ## Formula Reference
 
-**Target Amperage Calculation:**
+### Solar Dynamic Current
 ```
-target_amps = (exported_power - power_buffer) / (voltage × phases)
-```
-
-**Examples (single-phase):**
-- 3000W export, 100W buffer, 230V, 1 phase: `(3000-100)/(230×1) = 12.6A`
-- 5000W export, 200W buffer, 240V, 1 phase: `(5000-200)/(240×1) = 20.0A`
-- 1500W export, 500W buffer, 230V, 1 phase: `(1500-500)/(230×1) = 4.3A` → May be below min_current
-
-**Examples (three-phase):**
-- 9000W export, 100W buffer, 230V, 3 phases: `(9000-100)/(230×3) = 12.9A`
-- 15000W export, 200W buffer, 230V, 3 phases: `(15000-200)/(230×3) = 21.4A`
-
-**Power Needed for Target Current:**
-```
-power_needed = (target_amps × voltage × phases) + power_buffer
+charger_draw = current_amps x voltage x phases
+available_watts = grid_export + charger_draw - power_buffer
+target_amps = available_watts / (voltage x phases)    (truncated to integer)
 ```
 
-**Examples:**
-- 16A target, 230V, 1 phase, 100W buffer: `(16×230×1)+100 = 3780W` needed
-- 32A target, 240V, 1 phase, 200W buffer: `(32×240×1)+200 = 7880W` needed
-- 16A target, 230V, 3 phases, 100W buffer: `(16×230×3)+100 = 11140W` needed
+The formula adds back the charger's current draw because the grid export sensor shows what's left *after* the charger is already consuming power.
+
+**Examples (single-phase, 230V, 100W buffer):**
+- 3000W export, 6A current: (3000 + 1380 - 100) / 230 = **18A**
+- 1000W export, 0A current: (1000 + 0 - 100) / 230 = **3A**
+- 500W export, 10A current: (500 + 2300 - 100) / 230 = **11A**
+
+### Nightly Charge
+```
+charger_draw = current_amps x voltage x phases
+base_load = max(grid_import - charger_draw, 0)
+available_watts = max_import_power - base_load - power_buffer
+target_amps = available_watts / (voltage x phases)    (truncated to integer)
+```
+
+The formula separates household base load from charger consumption to determine how much headroom remains within the import limit.
+
+**Examples (single-phase, 230V, 3000W limit, 400W buffer):**
+- 500W base load: (3000 - 500 - 400) / 230 = **9A**
+- 1000W base load: (3000 - 1000 - 400) / 230 = **6A**
+- 2000W base load: (3000 - 2000 - 400) / 230 = **2A**
 
 ---
 
