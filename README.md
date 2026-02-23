@@ -7,8 +7,10 @@ Intelligent EV charging automations that maximize solar power usage during the d
 ### Solar Dynamic Current (Daytime)
 Adjusts charging current in real-time based on available solar export:
 - **Formula**: `Target Amps = (Grid Export + Current Charger Draw - Buffer) / (Voltage x Phases)`
-- **Responsive lowering**: Immediately reduces current when export drops
+- **Responsive lowering**: Immediately reduces current when export drops (while still exporting)
+- **Cloud resilience**: Only drops to minimum after 20s of sustained grid import (ignores brief clouds)
 - **Stable raising**: Only increases current after sustained high export (prevents oscillation)
+- **Enable switch**: Toggle solar charging on/off via an `input_boolean` helper
 - **Integer amps**: Always outputs whole-number amp values
 - **Configurable limits**: Min/max current, voltage, buffer, raise delay, and schedule window
 
@@ -41,12 +43,19 @@ See [INSTALLATION.md](INSTALLATION.md) for detailed setup instructions.
 
 ### Setting Up Solar Dynamic Current
 
-1. Go to **Settings** > **Automations & Scenes**
-2. Click **"+ Create Automation"** > **"Use a Blueprint"**
-3. Select **"Auto-Charge Dynamic Current Adjustment"**
-4. Configure:
+1. **Create an `input_boolean` helper** first:
+   - Go to **Settings** > **Devices & Services** > **Helpers**
+   - Click **"+ Create Helper"** > **"Toggle"**
+   - Name it something like "Solar Charge Enable"
+   - This switch controls whether solar charging is active
+
+2. Go to **Settings** > **Automations & Scenes**
+3. Click **"+ Create Automation"** > **"Use a Blueprint"**
+4. Select **"Auto-Charge Dynamic Current Adjustment"**
+5. Configure:
    - **Power Sensor**: Grid power sensor (negative when exporting)
    - **Max Current Entity**: Your charger's current control (number entity)
+   - **Solar Charge Enable Switch**: The `input_boolean` you created above
    - **Voltage**: Your grid voltage (default: 230V)
    - **Phases**: 1 for single-phase, 3 for three-phase (default: 1)
    - **Power Buffer**: Safety margin to avoid grid import (default: 100W)
@@ -54,11 +63,11 @@ See [INSTALLATION.md](INSTALLATION.md) for detailed setup instructions.
    - **Max Current**: Maximum charging current (default: 32A)
    - **Raise Delay**: Minutes to wait before raising current (default: 3 min)
    - **Schedule Start/End**: Time window for solar charging (default: 09:00-22:00)
-5. Save the automation
+6. Save the automation
 
 ### Setting Up Nightly Charge
 
-1. **Create an `input_boolean` helper** first:
+1. **Create an `input_boolean` helper** first (if you haven't already created one for solar charging, you need a separate one for night charging):
    - Go to **Settings** > **Devices & Services** > **Helpers**
    - Click **"+ Create Helper"** > **"Toggle"**
    - Name it something like "Night Charge Enable"
@@ -86,6 +95,7 @@ See [INSTALLATION.md](INSTALLATION.md) for detailed setup instructions.
 ### For Solar Dynamic Current:
 - A **power sensor** that shows grid import/export (negative when exporting)
 - A **number entity** that controls max charging current
+- An **`input_boolean` helper** to enable/disable solar charging
 - Charger must support dynamic current adjustment
 
 ### For Nightly Charge:
@@ -98,13 +108,14 @@ See [INSTALLATION.md](INSTALLATION.md) for detailed setup instructions.
 
 ### Solar Dynamic Current Logic
 ```
-Every 20 seconds (during schedule window):
+Every 20 seconds (during schedule window, if enable switch is ON):
 1. Read grid export and current charger amps
 2. Calculate charger draw = current_amps x voltage x phases
 3. Calculate available = grid_export + charger_draw - buffer
 4. Calculate target_amps = available / (voltage x phases)  (truncated to integer)
 5. Clamp between min_current and max_current
-6. IF target < current → Lower immediately
+6. IF target < current AND still exporting → Lower immediately
+   ELSE IF importing for 20+ seconds → Drop to minimum
    ELSE IF target > current AND stable for raise_delay → Raise
 ```
 
@@ -149,6 +160,7 @@ Works with any Home Assistant integrated charger that supports dynamic current c
 ## Troubleshooting
 
 ### Current not adjusting?
+- Check that the **enable switch** (`input_boolean`) is turned ON
 - Check that power sensor is negative when exporting (solar blueprint) or positive when importing (night blueprint)
 - Verify the max current entity is writable
 - Check automation traces in Home Assistant

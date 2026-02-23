@@ -38,6 +38,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - HACS integration support
 - MIT License
 
+## [1.2.0] - 2026-02-23
+
+### Added
+- Solar Dynamic Current: Enable/disable switch via `input_boolean` helper (matches night charging)
+- Solar Dynamic Current: Cloud resilience — only drops to minimum after 20s of sustained grid import
+  - Brief cloud cover no longer causes unnecessary current drops to zero
+  - Proportional lowering still happens immediately while exporting
+
+### Changed
+- Solar Dynamic Current now uses two triggers: periodic (every 20s) and sustained import (20s debounce)
+- Both blueprints now require an `input_boolean` helper for enable/disable control
+- Updated all documentation to reflect new enable switch and cloud resilience features
+
 ## [Unreleased]
 
 ### Planned

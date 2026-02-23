@@ -4,7 +4,7 @@ This document provides example configurations for common setups.
 
 ## Solar Dynamic Current Examples
 
-These examples use the **Auto-Charge Dynamic Current Adjustment** blueprint for daytime solar charging.
+These examples use the **Auto-Charge Dynamic Current Adjustment** blueprint for daytime solar charging. All require an `input_boolean` helper for the enable switch.
 
 ### Example 1: Single-Phase Solar Setup (230V, 16A Max)
 
@@ -13,6 +13,7 @@ These examples use the **Auto-Charge Dynamic Current Adjustment** blueprint for 
 ```yaml
 Power Sensor: sensor.home_grid_power          # Negative when exporting
 Max Current Entity: number.mycharger_max_current
+Solar Charge Enable Switch: input_boolean.solar_charge_enable
 Voltage: 230
 Phases: 1
 Power Buffer: 150    # Conservative buffer
@@ -37,6 +38,7 @@ Schedule End: 22:00:00
 ```yaml
 Power Sensor: sensor.solar_net_power
 Max Current Entity: number.wallbox_max_current
+Solar Charge Enable Switch: input_boolean.solar_charge_enable
 Voltage: 230
 Phases: 3
 Power Buffer: 100    # Tight buffer for good tracking
@@ -61,6 +63,7 @@ Schedule End: 20:00:00
 ```yaml
 Power Sensor: sensor.battery_grid_power
 Max Current Entity: number.ev_max_current
+Solar Charge Enable Switch: input_boolean.solar_charge_enable
 Voltage: 230
 Phases: 1
 Power Buffer: 500    # Very large buffer!
@@ -85,6 +88,7 @@ Schedule End: 18:00:00
 ```yaml
 Power Sensor: sensor.powerwall_grid_power
 Max Current Entity: number.tesla_current_limit
+Solar Charge Enable Switch: input_boolean.solar_charge_enable
 Voltage: 240
 Phases: 1
 Power Buffer: 50     # Minimal buffer

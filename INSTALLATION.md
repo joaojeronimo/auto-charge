@@ -5,7 +5,7 @@
 - Home Assistant installed and running
 - An EV charger integration with a **number entity** for current control
 - A **power sensor** showing grid import/export
-- For night charging: an **`input_boolean` helper** (created in step below)
+- An **`input_boolean` helper** for each blueprint (created in steps below)
 
 ## Method 1: Blueprint Import (Recommended)
 
@@ -70,16 +70,17 @@
 
 ## Next Steps
 
-### Create Night Charge Enable Switch (Required for Night Charging)
+### Create Enable Switches (Required for Both Blueprints)
 
-Before configuring the nightly charge blueprint, create an `input_boolean` helper:
+Before configuring the blueprints, create `input_boolean` helpers for each:
 
 1. Go to **Settings** > **Devices & Services** > **Helpers**
 2. Click **"+ Create Helper"** > **"Toggle"**
-3. Name it something like **"Night Charge Enable"**
+3. Name it **"Solar Charge Enable"**
 4. Save it
+5. Repeat and create another toggle named **"Night Charge Enable"**
 
-This toggle switch lets you turn night charging on and off. You can add it to your dashboard for easy access.
+These toggle switches let you turn each charging mode on and off independently. You can add them to your dashboard for easy access.
 
 ### Configure Solar Dynamic Current
 
@@ -88,6 +89,7 @@ This toggle switch lets you turn night charging on and off. You can add it to yo
 3. Fill in:
    - **Power Sensor**: Your grid power sensor (e.g., `sensor.grid_power`) — must be negative when exporting
    - **Max Current Entity**: Your charger's current control (e.g., `number.charger_max_current`)
+   - **Solar Charge Enable Switch**: The `input_boolean` you created above (e.g., `input_boolean.solar_charge_enable`)
    - **Voltage**: Your grid voltage (e.g., `230` or `240`)
    - **Phases**: Number of phases (`1` for single-phase, `3` for three-phase)
    - **Power Buffer**: Safety margin in Watts (e.g., `100`)
@@ -127,9 +129,10 @@ This toggle switch lets you turn night charging on and off. You can add it to yo
 - Check that entities exist in **Settings** > **Devices & Services** > **Entities**
 - Power sensor should show negative values when exporting (solar) or positive when importing (night)
 
-### Night Charge Enable Switch Not Listed?
+### Enable Switch Not Listed?
 - Make sure you created an `input_boolean` helper (not an `input_select` or other type)
 - The entity selector filters by `input_boolean` domain — only toggle helpers will appear
+- You need a separate `input_boolean` for each blueprint (solar and night)
 
 ### Need Help?
 - Check the [full documentation](README.md)

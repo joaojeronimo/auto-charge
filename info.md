@@ -22,6 +22,8 @@ This package contains **two automation blueprints**:
 
 - **Solar dynamic current** based on real-time grid export (single and three-phase)
 - **Night charging** with grid import limiting and enable/disable switch
+- **Enable/disable switches** for both blueprints via `input_boolean` helpers
+- **Cloud resilience** — solar charging ignores brief import blips (20s debounce)
 - **Smart algorithm** that lowers quickly, raises slowly (prevents oscillation)
 - **Integer amp output** for clean charger control
 - **Fully configurable** through Home Assistant UI — no coding required
@@ -30,7 +32,7 @@ This package contains **two automation blueprints**:
 
 - A power sensor that shows grid import/export
 - An EV charger integration with a number entity for current control
-- For night charging: an `input_boolean` helper to enable/disable
+- An `input_boolean` helper for each blueprint to enable/disable
 
 ### Support
 

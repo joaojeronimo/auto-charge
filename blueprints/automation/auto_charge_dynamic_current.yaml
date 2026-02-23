@@ -97,6 +97,13 @@ blueprint:
       selector:
         time:
 
+    enable_switch:
+      name: Solar Charge Enable Switch
+      description: Toggle switch to enable/disable solar charging (input_boolean)
+      selector:
+        entity:
+          domain: input_boolean
+
     schedule_end:
       name: Schedule End Time
       description: End time for charging window
@@ -113,6 +120,7 @@ variables:
   cfg_raise_delay: !input raise_delay
   power_sensor_entity: !input power_sensor
   max_current_entity_id: !input max_current_entity
+  enable_switch_entity: !input enable_switch
 
 trigger:
   - platform: time_pattern
@@ -126,6 +134,8 @@ trigger:
     id: "sustained_import"
 
 condition:
+  - condition: template
+    value_template: "{{ states(enable_switch_entity) == 'on' }}"
   - condition: time
     after: !input schedule_start
     before: !input schedule_end
