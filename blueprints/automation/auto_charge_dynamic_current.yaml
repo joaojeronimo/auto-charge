@@ -2,7 +2,8 @@ blueprint:
   name: Auto-Charge Dynamic Current Adjustment
   description: |
     Dynamically adjusts EV charging current based on available solar export power.
-    - Lowers current immediately when export drops (responsive)
+    - Lowers current immediately when export drops while still exporting
+    - Only drops to minimum after 20s of sustained grid import (ignores brief clouds)
     - Raises current only after sustained high export (stable)
     - Formula: Target Amps = (Exported Power - Buffer) / (Voltage × Phases)
     - Keeps current between configurable min/max limits
@@ -116,6 +117,13 @@ variables:
 trigger:
   - platform: time_pattern
     seconds: "/20"
+    id: "periodic"
+  - platform: numeric_state
+    entity_id: !input power_sensor
+    above: 0
+    for:
+      seconds: 20
+    id: "sustained_import"
 
 condition:
   - condition: time
@@ -143,10 +151,14 @@ action:
         {% endif %}
 
   - choose:
-      # Case 1: LOWER current immediately (responsive to drops in export)
+      # Case 1: LOWER current
+      # - If still exporting (power < 0): adjust proportionally on periodic check
+      # - If importing (power >= 0): only lower after 20s sustained import trigger
       - conditions:
           - condition: template
-            value_template: "{{ target_amps | int < current_max_amps | int }}"
+            value_template: >
+              {{ target_amps | int < current_max_amps | int
+                 and (power_export | float(0) < 0 or trigger.id == 'sustained_import') }}
         sequence:
           - service: number.set_value
             target:
