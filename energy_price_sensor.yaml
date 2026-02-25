@@ -1,0 +1,194 @@
+# =============================================================================
+# Coopernico GO 2.0 - Energy Price Sensors (Simples / Bi-Horária / Tri-Horária)
+# =============================================================================
+#
+# Uses macros from coopernico.jinja (installed via HACS to custom_templates/).
+#
+# SETUP:
+#   1. Install "Coopernico GO 2.0 Energy Price" via HACS (template category)
+#   2. Add the input_text helper below (or create it in the HA UI)
+#   3. Set its value to your OMIE sensor entity ID
+#      (e.g. sensor.omie_spot_price_pt)
+#   4. Copy the sensor definitions into your configuration:
+#        template: !include energy_price_sensor.yaml
+#   5. Pick only the tariff sections you need (simples, bi, tri, or all)
+#
+# FORMULA (for reference):
+#   Energy = ((OMIE + 0.009) × 1.16) + 0.001
+#   Total  = Energy + TAR + CS + CR + TSE + IEC
+#   IVA 6% = (Total excl. IEC) × 1.06 + IEC × 1.23   (first 200 kWh/month)
+#   IVA 23%= Total × 1.23                               (beyond 200 kWh/month)
+# =============================================================================
+
+# -----------------------------------------------
+# Helper: set this to your OMIE sensor entity ID
+# (e.g. sensor.omie_spot_price_pt)
+# You can also create this via Settings > Helpers
+# -----------------------------------------------
+input_text:
+  coopernico_omie_sensor:
+    name: "Coopernico OMIE Sensor"
+    icon: mdi:flash
+    initial: "sensor.omie_spot_price_pt"
+    min: 5
+    max: 255
+
+template:
+  - sensor:
+
+      # =====================================================================
+      # SHARED: Coopernico GO 2.0 energy component
+      # =====================================================================
+      - name: "Coopernico GO Energy"
+        unique_id: coopernico_go_energy
+        unit_of_measurement: "€/kWh"
+        device_class: monetary
+        icon: mdi:lightning-bolt
+        state: >-
+          {% from 'coopernico.jinja' import energy_price %}
+          {{ energy_price() }}
+
+      # =====================================================================
+      #  SIMPLES
+      # =====================================================================
+      - name: "Coopernico GO Simples Período"
+        unique_id: coopernico_go_simples_periodo
+        icon: mdi:clock-outline
+        state: "simples"
+
+      - name: "Coopernico GO Simples TAR"
+        unique_id: coopernico_go_simples_tar
+        unit_of_measurement: "€/kWh"
+        icon: mdi:transmission-tower
+        state: >-
+          {% from 'coopernico.jinja' import tar_simples %}
+          {{ tar_simples() }}
+
+      - name: "Coopernico GO Simples"
+        unique_id: coopernico_go_simples_total
+        unit_of_measurement: "€/kWh"
+        device_class: monetary
+        icon: mdi:currency-eur
+        state: >-
+          {% from 'coopernico.jinja' import coopernico_simples %}
+          {{ coopernico_simples() }}
+
+      - name: "Coopernico GO Simples c/ IVA 6%"
+        unique_id: coopernico_go_simples_iva6
+        unit_of_measurement: "€/kWh"
+        device_class: monetary
+        icon: mdi:currency-eur
+        state: >-
+          {% from 'coopernico.jinja' import coopernico_simples_iva6 %}
+          {{ coopernico_simples_iva6() }}
+        attributes:
+          description: "First 200 kWh/month (contracts ≤ 6.9 kVA)"
+
+      - name: "Coopernico GO Simples c/ IVA 23%"
+        unique_id: coopernico_go_simples_iva23
+        unit_of_measurement: "€/kWh"
+        device_class: monetary
+        icon: mdi:currency-eur
+        state: >-
+          {% from 'coopernico.jinja' import coopernico_simples_iva23 %}
+          {{ coopernico_simples_iva23() }}
+        attributes:
+          description: "Beyond 200 kWh/month"
+
+      # =====================================================================
+      #  BI-HORÁRIA
+      # =====================================================================
+      - name: "Coopernico GO Bi-Horária Período"
+        unique_id: coopernico_go_bihoraria_periodo
+        icon: mdi:clock-outline
+        state: >-
+          {% from 'coopernico.jinja' import bi_horaria_periodo %}
+          {{ bi_horaria_periodo() }}
+
+      - name: "Coopernico GO Bi-Horária TAR"
+        unique_id: coopernico_go_bihoraria_tar
+        unit_of_measurement: "€/kWh"
+        icon: mdi:transmission-tower
+        state: >-
+          {% from 'coopernico.jinja' import tar_bi_horaria %}
+          {{ tar_bi_horaria() }}
+
+      - name: "Coopernico GO Bi-Horária"
+        unique_id: coopernico_go_bihoraria_total
+        unit_of_measurement: "€/kWh"
+        device_class: monetary
+        icon: mdi:currency-eur
+        state: >-
+          {% from 'coopernico.jinja' import coopernico_bi_horaria %}
+          {{ coopernico_bi_horaria() }}
+
+      - name: "Coopernico GO Bi-Horária c/ IVA 6%"
+        unique_id: coopernico_go_bihoraria_iva6
+        unit_of_measurement: "€/kWh"
+        device_class: monetary
+        icon: mdi:currency-eur
+        state: >-
+          {% from 'coopernico.jinja' import coopernico_bi_horaria_iva6 %}
+          {{ coopernico_bi_horaria_iva6() }}
+        attributes:
+          description: "First 200 kWh/month (contracts ≤ 6.9 kVA)"
+
+      - name: "Coopernico GO Bi-Horária c/ IVA 23%"
+        unique_id: coopernico_go_bihoraria_iva23
+        unit_of_measurement: "€/kWh"
+        device_class: monetary
+        icon: mdi:currency-eur
+        state: >-
+          {% from 'coopernico.jinja' import coopernico_bi_horaria_iva23 %}
+          {{ coopernico_bi_horaria_iva23() }}
+        attributes:
+          description: "Beyond 200 kWh/month"
+
+      # =====================================================================
+      #  TRI-HORÁRIA
+      # =====================================================================
+      - name: "Coopernico GO Tri-Horária Período"
+        unique_id: coopernico_go_trihoraria_periodo
+        icon: mdi:clock-outline
+        state: >-
+          {% from 'coopernico.jinja' import tri_horaria_periodo %}
+          {{ tri_horaria_periodo() }}
+
+      - name: "Coopernico GO Tri-Horária TAR"
+        unique_id: coopernico_go_trihoraria_tar
+        unit_of_measurement: "€/kWh"
+        icon: mdi:transmission-tower
+        state: >-
+          {% from 'coopernico.jinja' import tar_tri_horaria %}
+          {{ tar_tri_horaria() }}
+
+      - name: "Coopernico GO Tri-Horária"
+        unique_id: coopernico_go_trihoraria_total
+        unit_of_measurement: "€/kWh"
+        device_class: monetary
+        icon: mdi:currency-eur
+        state: >-
+          {% from 'coopernico.jinja' import coopernico_tri_horaria %}
+          {{ coopernico_tri_horaria() }}
+
+      - name: "Coopernico GO Tri-Horária c/ IVA 6%"
+        unique_id: coopernico_go_trihoraria_iva6
+        unit_of_measurement: "€/kWh"
+        device_class: monetary
+        icon: mdi:currency-eur
+        state: >-
+          {% from 'coopernico.jinja' import coopernico_tri_horaria_iva6 %}
+          {{ coopernico_tri_horaria_iva6() }}
+        attributes:
+          description: "First 200 kWh/month (contracts ≤ 6.9 kVA)"
+
+      - name: "Coopernico GO Tri-Horária c/ IVA 23%"
+        unique_id: coopernico_go_trihoraria_iva23
+        unit_of_measurement: "€/kWh"
+        device_class: monetary
+        icon: mdi:currency-eur
+        state: >-
+          {% from 'coopernico.jinja' import coopernico_tri_horaria_iva23 %}
+          {{ coopernico_tri_horaria_iva23() }}
+        attributes:
+          description: "Beyond 200 kWh/month"

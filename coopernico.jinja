@@ -1,0 +1,266 @@
+{#-
+  Coopernico GO 2.0 - Energy Price Macros
+  ========================================
+  Calculates real energy prices based on OMIE spot price for
+  Coopernico GO 2.0 indexed tariff (Portugal).
+
+  Setup:
+    1. Install via HACS (template category)
+    2. Create an input_text helper called "coopernico_omie_sensor"
+       and set its value to your OMIE sensor entity ID
+       (e.g. sensor.omie_spot_price_pt)
+    3. Copy the example sensors from energy_price_sensor.yaml
+
+  Usage in templates:
+    {% from 'coopernico.jinja' import coopernico_tri_horaria %}
+    {{ coopernico_tri_horaria() }}
+
+  All macros read the OMIE sensor from input_text.coopernico_omie_sensor
+  by default. You can override by passing a sensor entity explicitly:
+    {{ coopernico_tri_horaria('sensor.my_custom_omie') }}
+
+  Sources:
+    - Formula: https://www.coopernico.org/artigo/377
+    - TAR 2026: https://lojaluz.com/faq/tarifa-acesso-redes
+    - Periods: https://www.tiagofelicia.pt/periodos-horarios.html
+    - IVA rules: https://www.doutorfinancas.pt/energia/iva-da-eletricidade-quando-e-6-e-quando-e-23/
+-#}
+
+
+{#- ================================================================
+    CONFIGURATION
+    The OMIE sensor entity is read from input_text.coopernico_omie_sensor.
+    All macros accept an optional override parameter.
+    ================================================================ -#}
+{%- set _omie_helper = 'input_text.coopernico_omie_sensor' -%}
+{%- set _omie_default = 'sensor.omie_spot_price_pt' -%}
+
+{%- macro _omie_entity(override) -%}
+  {%- if override -%}
+    {{ override }}
+  {%- else -%}
+    {%- set configured = states(_omie_helper) -%}
+    {%- if configured and configured not in ['unknown', 'unavailable', ''] -%}
+      {{ configured }}
+    {%- else -%}
+      {{ _omie_default }}
+    {%- endif -%}
+  {%- endif -%}
+{%- endmacro -%}
+
+
+{#- ================================================================
+    COOPERNICO GO 2.0 FORMULA CONSTANTS
+    Update these when Coopernico publishes new values.
+    ================================================================ -#}
+{%- set _k  = 0.009 -%}
+{%- set _fp = 0.16 -%}
+{%- set _go = 0.001 -%}
+
+{#- Regulated costs -#}
+{%- set _cs  = 0.003 -%}
+{%- set _cr  = 0.006 -%}
+{%- set _tse = 0.0020666 -%}
+{%- set _iec = 0.001 -%}
+
+{#- ================================================================
+    TAR VALUES (BTN 2026)
+    Update these when ERSE publishes new values (typically yearly).
+    Split into two semesters for 2026.
+
+    NOTE: The S2 (from June) tri-horário values have ponta < cheias.
+    This appears intentional due to ERSE's CIEG restructuring for the
+    2026-2029 regulatory period. Verify against your first S2 bill
+    and update if needed.
+    ================================================================ -#}
+{%- set _tar = {
+  "simples": {
+    "s1": { "flat": 0.0365 },
+    "s2": { "flat": 0.0625 }
+  },
+  "bi": {
+    "s1": { "fora_de_vazio": 0.0502, "vazio": 0.0092 },
+    "s2": { "fora_de_vazio": 0.0860, "vazio": 0.0157 }
+  },
+  "tri": {
+    "s1": { "ponta": 0.1511, "cheias": 0.0237, "vazio": 0.0092 },
+    "s2": { "ponta": 0.0259, "cheias": 0.0406, "vazio": 0.0157 }
+  }
+} -%}
+
+
+{#- ================================================================
+    SUMMER/WINTER DETECTION
+    DST in Portugal: last Sunday of March → last Sunday of October
+    ================================================================ -#}
+
+{%- macro _is_summer() -%}
+  {%- set mar_last_day = now().replace(month=3, day=31) -%}
+  {%- set mar_last_sun = 31 - ((mar_last_day.weekday() + 1) % 7) -%}
+  {%- set oct_last_day = now().replace(month=10, day=31) -%}
+  {%- set oct_last_sun = 31 - ((oct_last_day.weekday() + 1) % 7) -%}
+  {%- set after_mar = now().month > 3 or (now().month == 3 and now().day >= mar_last_sun) -%}
+  {%- set before_oct = now().month < 10 or (now().month == 10 and now().day < oct_last_sun) -%}
+  {{ after_mar and before_oct }}
+{%- endmacro -%}
+
+
+{#- ================================================================
+    TARIFF PERIOD DETECTION
+    ================================================================ -#}
+
+{#- Returns the current bi-horário period: "fora_de_vazio" or "vazio"
+    Schedule (daily cycle): Fora de Vazio 08:00-22:00, Vazio 22:00-08:00 -#}
+{%- macro bi_horaria_periodo() -%}
+  {%- set h = now().hour -%}
+  {%- if h >= 8 and h < 22 -%}
+    fora_de_vazio
+  {%- else -%}
+    vazio
+  {%- endif -%}
+{%- endmacro -%}
+
+
+{#- Returns the current tri-horário period: "ponta", "cheias", or "vazio"
+    Schedule (daily cycle, Continental Portugal):
+      Winter: Ponta 09:00-10:30 & 18:00-20:30
+              Cheias 08:00-09:00 & 10:30-18:00 & 20:30-22:00
+              Vazio  22:00-08:00
+      Summer: Ponta 10:30-13:00 & 19:30-21:00
+              Cheias 08:00-10:30 & 13:00-19:30 & 21:00-22:00
+              Vazio  22:00-08:00 -#}
+{%- macro tri_horaria_periodo() -%}
+  {%- set t = now().hour * 60 + now().minute -%}
+  {%- set summer = _is_summer() | trim == 'True' -%}
+  {%- if summer -%}
+    {%- if (t >= 630 and t < 780) or (t >= 1170 and t < 1260) -%}
+      ponta
+    {%- elif (t >= 480 and t < 630) or (t >= 780 and t < 1170) or (t >= 1260 and t < 1320) -%}
+      cheias
+    {%- else -%}
+      vazio
+    {%- endif -%}
+  {%- else -%}
+    {%- if (t >= 540 and t < 630) or (t >= 1080 and t < 1230) -%}
+      ponta
+    {%- elif (t >= 480 and t < 540) or (t >= 630 and t < 1080) or (t >= 1230 and t < 1320) -%}
+      cheias
+    {%- else -%}
+      vazio
+    {%- endif -%}
+  {%- endif -%}
+{%- endmacro -%}
+
+
+{#- ================================================================
+    TAR LOOKUP
+    ================================================================ -#}
+
+{#- Returns the current semester key ("s1" or "s2") -#}
+{%- macro _semester() -%}
+  {%- if now().month < 6 -%}s1{%- else -%}s2{%- endif -%}
+{%- endmacro -%}
+
+{%- macro tar_simples() -%}
+  {{ _tar.simples[_semester()].flat }}
+{%- endmacro -%}
+
+{%- macro tar_bi_horaria() -%}
+  {{ _tar.bi[_semester()][bi_horaria_periodo()] }}
+{%- endmacro -%}
+
+{%- macro tar_tri_horaria() -%}
+  {{ _tar.tri[_semester()][tri_horaria_periodo()] }}
+{%- endmacro -%}
+
+
+{#- ================================================================
+    ENERGY PRICE (Coopernico component only, before TAR & taxes)
+    Formula: ((OMIE + k) × (1 + FP)) + GO
+    ================================================================ -#}
+
+{%- macro energy_price(omie_sensor='') -%}
+  {%- set sensor = _omie_entity(omie_sensor) -%}
+  {%- set omie = states(sensor) | float(0) -%}
+  {{ (((omie + _k) * (1 + _fp)) + _go) | round(6) }}
+{%- endmacro -%}
+
+
+{#- ================================================================
+    TOTAL PRICE (energy + TAR + regulated costs, before IVA)
+    ================================================================ -#}
+
+{%- macro coopernico_simples(omie_sensor='') -%}
+  {%- set e = energy_price(omie_sensor) | float -%}
+  {%- set t = tar_simples() | float -%}
+  {{ (e + t + _cs + _cr + _tse + _iec) | round(6) }}
+{%- endmacro -%}
+
+{%- macro coopernico_bi_horaria(omie_sensor='') -%}
+  {%- set e = energy_price(omie_sensor) | float -%}
+  {%- set t = tar_bi_horaria() | float -%}
+  {{ (e + t + _cs + _cr + _tse + _iec) | round(6) }}
+{%- endmacro -%}
+
+{%- macro coopernico_tri_horaria(omie_sensor='') -%}
+  {%- set e = energy_price(omie_sensor) | float -%}
+  {%- set t = tar_tri_horaria() | float -%}
+  {{ (e + t + _cs + _cr + _tse + _iec) | round(6) }}
+{%- endmacro -%}
+
+
+{#- ================================================================
+    TOTAL PRICE WITH IVA
+    IVA rules (Portugal, since Jan 2025):
+      - IEC always taxed at 23%
+      - Everything else: 6% for first 200 kWh/month (≤6.9 kVA),
+        23% beyond that
+    Use iva6 for the first 200 kWh, iva23 beyond.
+    ================================================================ -#}
+
+{%- macro _apply_iva6(energy, tar) -%}
+  {{ ((energy + tar + _cs + _cr + _tse) * 1.06 + _iec * 1.23) | round(6) }}
+{%- endmacro -%}
+
+{%- macro _apply_iva23(energy, tar) -%}
+  {{ ((energy + tar + _cs + _cr + _tse + _iec) * 1.23) | round(6) }}
+{%- endmacro -%}
+
+{#- Simples -#}
+{%- macro coopernico_simples_iva6(omie_sensor='') -%}
+  {%- set e = energy_price(omie_sensor) | float -%}
+  {%- set t = tar_simples() | float -%}
+  {{ _apply_iva6(e, t) }}
+{%- endmacro -%}
+
+{%- macro coopernico_simples_iva23(omie_sensor='') -%}
+  {%- set e = energy_price(omie_sensor) | float -%}
+  {%- set t = tar_simples() | float -%}
+  {{ _apply_iva23(e, t) }}
+{%- endmacro -%}
+
+{#- Bi-Horária -#}
+{%- macro coopernico_bi_horaria_iva6(omie_sensor='') -%}
+  {%- set e = energy_price(omie_sensor) | float -%}
+  {%- set t = tar_bi_horaria() | float -%}
+  {{ _apply_iva6(e, t) }}
+{%- endmacro -%}
+
+{%- macro coopernico_bi_horaria_iva23(omie_sensor='') -%}
+  {%- set e = energy_price(omie_sensor) | float -%}
+  {%- set t = tar_bi_horaria() | float -%}
+  {{ _apply_iva23(e, t) }}
+{%- endmacro -%}
+
+{#- Tri-Horária -#}
+{%- macro coopernico_tri_horaria_iva6(omie_sensor='') -%}
+  {%- set e = energy_price(omie_sensor) | float -%}
+  {%- set t = tar_tri_horaria() | float -%}
+  {{ _apply_iva6(e, t) }}
+{%- endmacro -%}
+
+{%- macro coopernico_tri_horaria_iva23(omie_sensor='') -%}
+  {%- set e = energy_price(omie_sensor) | float -%}
+  {%- set t = tar_tri_horaria() | float -%}
+  {{ _apply_iva23(e, t) }}
+{%- endmacro -%}
