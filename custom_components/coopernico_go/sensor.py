@@ -243,7 +243,7 @@ class CoopernicoEnergySensor(CoopernicoPriceSensor):
         if omie is None:
             self._attr_native_value = None
             return
-        self._attr_native_value = round(_energy_price(omie), 6)
+        self._attr_native_value = round(_energy_price(omie), 4)
 
 
 class CoopernicoTarSensor(CoopernicoPriceSensor):
@@ -260,7 +260,7 @@ class CoopernicoTarSensor(CoopernicoPriceSensor):
     def _update_state(self) -> None:
         dt = datetime.now()
         tar_func = _TARIFF_MAP[self._tariff][1]
-        self._attr_native_value = round(tar_func(dt), 6)
+        self._attr_native_value = round(tar_func(dt), 4)
 
 
 class CoopernicoTotalSensor(CoopernicoPriceSensor):
@@ -283,7 +283,7 @@ class CoopernicoTotalSensor(CoopernicoPriceSensor):
         energy = _energy_price(omie)
         tar_func = _TARIFF_MAP[self._tariff][1]
         tar = tar_func(dt)
-        self._attr_native_value = round(energy + tar + REGULATED_COSTS, 6)
+        self._attr_native_value = round(energy + tar + REGULATED_COSTS, 4)
 
 
 class CoopernicoIva6Sensor(CoopernicoPriceSensor):
@@ -306,7 +306,7 @@ class CoopernicoIva6Sensor(CoopernicoPriceSensor):
         energy = _energy_price(omie)
         tar_func = _TARIFF_MAP[self._tariff][1]
         tar = tar_func(dt)
-        self._attr_native_value = round(_apply_iva6(energy, tar), 6)
+        self._attr_native_value = round(_apply_iva6(energy, tar), 4)
 
     @property
     def extra_state_attributes(self):
@@ -333,7 +333,7 @@ class CoopernicoIva23Sensor(CoopernicoPriceSensor):
         energy = _energy_price(omie)
         tar_func = _TARIFF_MAP[self._tariff][1]
         tar = tar_func(dt)
-        self._attr_native_value = round(_apply_iva23(energy, tar), 6)
+        self._attr_native_value = round(_apply_iva23(energy, tar), 4)
 
     @property
     def extra_state_attributes(self):
