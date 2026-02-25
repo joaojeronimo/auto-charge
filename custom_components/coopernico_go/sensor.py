@@ -77,8 +77,12 @@ def _tri_periodo(dt: datetime) -> str:
         return "vazio"
 
 
-def _energy_price(omie: float) -> float:
-    """Calculate Coopernico energy component: ((OMIE + K) * (1 + FP)) + GO."""
+def _energy_price(omie_mwh: float) -> float:
+    """Calculate Coopernico energy component: ((OMIE + K) * (1 + FP)) + GO.
+
+    OMIE reports in EUR/MWh, convert to EUR/kWh first.
+    """
+    omie = omie_mwh / 1000.0
     return ((omie + K) * (1 + FP)) + GO
 
 
