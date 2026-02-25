@@ -220,9 +220,9 @@ class CoopernicoPeriodSensor(CoopernicoBaseSensor):
 
 
 class CoopernicoPriceSensor(CoopernicoBaseSensor):
-    """Base for price sensors (EUR/kWh)."""
+    """Base for price sensors (€/kWh)."""
 
-    _attr_native_unit_of_measurement = "EUR/kWh"
+    _attr_native_unit_of_measurement = "€/kWh"
     _attr_device_class = SensorDeviceClass.MONETARY
     _attr_state_class = SensorStateClass.MEASUREMENT
     _attr_suggested_display_precision = 4
