@@ -1,0 +1,12 @@
+{
+  "domain": "coopernico_go",
+  "name": "Coopernico GO 2.0",
+  "codeowners": ["@joaoj"],
+  "config_flow": true,
+  "dependencies": [],
+  "documentation": "https://github.com/joaoj/auto-charge",
+  "iot_class": "local_polling",
+  "issue_tracker": "https://github.com/joaoj/auto-charge/issues",
+  "requirements": [],
+  "version": "1.0.0"
+}

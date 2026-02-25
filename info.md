@@ -1,39 +1,31 @@
-## Auto-Charge: Smart EV Charging
+## Auto-Charge: Smart EV Charging + Coopernico GO Energy Prices
 
-Intelligent EV charging automation blueprints that maximize solar power usage during the day and manage grid import limits at night.
+Intelligent EV charging automation blueprints and real-time Coopernico GO 2.0 energy price sensors for Home Assistant.
 
 ### What's Included
 
-This package contains **two automation blueprints**:
+**Coopernico GO 2.0 Integration** — Real-time energy price sensors for the Coopernico GO indexed tariff (Portugal):
+- Pick your OMIE sensor and tariff type (Simples / Bi-Horária / Tri-Horária)
+- Automatic sensors: Period, Energy, TAR, Total, Total c/ IVA 6%, Total c/ IVA 23%
+- Semester-aware TAR values, summer/winter period detection
+- Portuguese & English translations
 
-1. **Auto-Charge Dynamic Current Adjustment** — Adjusts charging current in real-time based on available solar export, accounting for current charger draw
-2. **Nightly Charge Dynamic Current** — Manages overnight charging within a configurable grid import limit, with an on/off enable switch
+**Automation Blueprints**:
+1. **Auto-Charge Dynamic Current** — Adjusts charging current in real-time based on available solar export
+2. **Nightly Charge Dynamic Current** — Manages overnight charging within a configurable grid import limit
 
 ### Quick Start
 
-1. Go to **Settings** > **Automations & Scenes** > **Blueprints**
-2. Click **"Import Blueprint"** and paste the blueprint URL from the repository
-3. Repeat for the second blueprint
-4. For night charging: create an `input_boolean` helper (**Settings** > **Devices & Services** > **Helpers** > **Toggle**)
-5. Create automations from the blueprints and configure your entities
-6. Save and enable!
-
-### Key Features
-
-- **Solar dynamic current** based on real-time grid export (single and three-phase)
-- **Night charging** with grid import limiting and enable/disable switch
-- **Enable/disable switches** for both blueprints via `input_boolean` helpers
-- **Cloud resilience** — solar charging ignores brief import blips (20s debounce)
-- **Smart algorithm** that lowers quickly, raises slowly (prevents oscillation)
-- **Integer amp output** for clean charger control
-- **Fully configurable** through Home Assistant UI — no coding required
+1. Install via HACS (Integration category)
+2. **Settings** > **Devices & Services** > **+ Add Integration** > **Coopernico GO**
+3. Select your OMIE sensor and tariff type — sensors are created automatically
 
 ### Requirements
 
-- A power sensor that shows grid import/export
-- An EV charger integration with a number entity for current control
-- An `input_boolean` helper for each blueprint to enable/disable
+- Home Assistant 2023.4.0+
+- An OMIE spot price sensor (e.g. from the [OMIE integration](https://github.com/luuuis/hass_omie))
+- For charging blueprints: a power sensor and charger with current control
 
 ### Support
 
-Need help? Check the [full documentation](https://github.com/yourusername/auto-charge) or [report an issue](https://github.com/yourusername/auto-charge/issues).
+Need help? Check the [full documentation](https://github.com/joaoj/auto-charge) or [report an issue](https://github.com/joaoj/auto-charge/issues).

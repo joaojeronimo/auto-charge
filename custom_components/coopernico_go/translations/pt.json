@@ -1,0 +1,31 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Coopernico GO 2.0",
+        "description": "Configurar sensores de preço de energia Coopernico GO.",
+        "data": {
+          "omie_entity": "Sensor de preço OMIE",
+          "tariff": "Tipo de tarifa"
+        },
+        "data_description": {
+          "omie_entity": "Selecione o sensor de preço spot OMIE (por exemplo, da integração OMIE). A unidade deve ser EUR/kWh.",
+          "tariff": "O seu tipo de tarifa de eletricidade."
+        }
+      }
+    },
+    "abort": {
+      "already_configured": "Esta combinação de sensor OMIE e tarifa já está configurada."
+    }
+  },
+  "entity": {
+    "sensor": {
+      "period": { "name": "Período" },
+      "energy": { "name": "Energia" },
+      "tar": { "name": "TAR" },
+      "total": { "name": "Total" },
+      "total_iva6": { "name": "Total c/ IVA 6%" },
+      "total_iva23": { "name": "Total c/ IVA 23%" }
+    }
+  }
+}
