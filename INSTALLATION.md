@@ -22,18 +22,18 @@
      ```
    - Click **"Preview"** then **"Import"**
 
-3. **Import Nightly Charge Blueprint**
+3. **Import Grid Charge Blueprint**
    - Click **"Import Blueprint"** again
    - Paste the URL:
      ```
-     https://github.com/yourusername/auto-charge/blob/main/blueprints/automation/night_charge_dynamic_current.yaml
+     https://github.com/yourusername/auto-charge/blob/main/blueprints/automation/grid_charge.yaml
      ```
    - Click **"Preview"** then **"Import"**
 
 4. **Verify Installation**
    - Go to **Settings** > **Automations & Scenes**
    - Click **"Create Automation"** > **"Use a Blueprint"**
-   - You should see **"Auto-Charge Dynamic Current Adjustment"** and **"Nightly Charge Dynamic Current"**
+   - You should see **"Auto-Charge Dynamic Current Adjustment"** and **"Grid Charge"**
 
 ## Method 2: Manual Installation
 
@@ -42,7 +42,7 @@
 1. **Download Blueprints**
    - Download the following files from the repository:
      - `blueprints/automation/auto_charge_dynamic_current.yaml`
-     - `blueprints/automation/night_charge_dynamic_current.yaml`
+     - `blueprints/automation/grid_charge.yaml`
 
 2. **Create Directory**
    - Navigate to your Home Assistant config directory
@@ -78,7 +78,7 @@ Before configuring the blueprints, create `input_boolean` helpers for each:
 2. Click **"+ Create Helper"** > **"Toggle"**
 3. Name it **"Solar Charge Enable"**
 4. Save it
-5. Repeat and create another toggle named **"Night Charge Enable"**
+5. Repeat and create another toggle named **"Grid Charge Enable"**
 
 These toggle switches let you turn each charging mode on and off independently. You can add them to your dashboard for easy access.
 
@@ -99,14 +99,16 @@ These toggle switches let you turn each charging mode on and off independently. 
    - **Schedule Start/End**: Time window for solar charging (e.g., `09:00` to `22:00`)
 4. Click **"Save"** and give it a name
 
-### Configure Nightly Charge
+### Configure Grid Charge
 
 1. **Settings** > **Automations & Scenes** > **"Create Automation"**
-2. Select **"Use a Blueprint"** > **"Nightly Charge Dynamic Current"**
+2. Select **"Use a Blueprint"** > **"Grid Charge"**
 3. Fill in:
+   - **Energy Price Sensor**: Sensor showing current energy price in €/kWh (e.g., `sensor.coopernico_go_total`)
+   - **Maximum Energy Price**: Maximum price at which charging is allowed in €/kWh (e.g., `0.10`)
    - **Power Sensor**: Your grid power sensor (e.g., `sensor.grid_power`) — positive when importing
    - **Max Current Entity**: Your charger's current control (e.g., `number.charger_max_current`)
-   - **Night Charge Enable Switch**: The `input_boolean` you created above (e.g., `input_boolean.night_charge_enable`)
+   - **Night Charge Enable Switch**: The `input_boolean` you created above (e.g., `input_boolean.grid_charge_enable`)
    - **Maximum Import Power**: Your grid import cap in Watts (e.g., `3000`)
    - **Voltage**: Your grid voltage (e.g., `230` or `240`)
    - **Phases**: Number of phases (`1` or `3`)
@@ -114,7 +116,7 @@ These toggle switches let you turn each charging mode on and off independently. 
    - **Min Current**: Minimum amps (e.g., `0`)
    - **Max Current**: Maximum amps (e.g., `32`)
    - **Raise Delay**: Minutes to wait before raising current (e.g., `3`)
-   - **Schedule Start/End**: Night charging window (e.g., `22:00` to `08:00`)
+   - **Schedule Start/End**: Charging window (e.g., `22:00` to `08:00`)
 4. Click **"Save"** and give it a name
 
 ## Troubleshooting
@@ -127,12 +129,12 @@ These toggle switches let you turn each charging mode on and off independently. 
 ### Can't Find My Entities?
 - Make sure your charger integration is properly set up
 - Check that entities exist in **Settings** > **Devices & Services** > **Entities**
-- Power sensor should show negative values when exporting (solar) or positive when importing (night)
+- Power sensor should show negative values when exporting (solar) or positive when importing (grid charge)
 
 ### Enable Switch Not Listed?
 - Make sure you created an `input_boolean` helper (not an `input_select` or other type)
 - The entity selector filters by `input_boolean` domain — only toggle helpers will appear
-- You need a separate `input_boolean` for each blueprint (solar and night)
+- You need a separate `input_boolean` for each blueprint (solar and grid charge)
 
 ### Need Help?
 - Check the [full documentation](README.md)

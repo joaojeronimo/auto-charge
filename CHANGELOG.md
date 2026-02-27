@@ -53,6 +53,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- Renamed "Nightly Charge Dynamic Current" blueprint to **"Grid Charge"** (`grid_charge.yaml`)
+- Added **Energy Price Sensor** input — sensor showing current energy price in €/kWh
+- Added **Maximum Energy Price** input — configurable price cap for charging (default: 0.10 €/kWh)
+
 ### Planned
 - Multiple charger support
 - Historical tracking and statistics

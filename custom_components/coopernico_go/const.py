@@ -9,7 +9,7 @@ DEFAULT_NAME: Final = "Coopernico GO"
 # Formula: ((OMIE + K) * (1 + FP)) + GO
 K: Final = 0.009
 FP: Final = 0.16
-GO: Final = 0.001
+GO: Final = 0.0015
 
 # Regulated costs
 CS: Final = 0.003

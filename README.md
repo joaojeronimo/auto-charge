@@ -23,11 +23,12 @@ Adjusts charging current in real-time based on available solar export:
 - **Integer amps**: Always outputs whole-number amp values
 - **Configurable limits**: Min/max current, voltage, buffer, raise delay, and schedule window
 
-### Nightly Charge Dynamic Current
-Manages charging overnight while keeping total grid import below a configurable limit:
+### Grid Charge
+Manages grid charging while keeping total grid import below a configurable limit, with optional energy price awareness:
 - **Formula**: `Target Amps = (Max Import - Base Load - Buffer) / (Voltage x Phases)`
 - **Import limiting**: Calculates base household load and ensures charging stays within your grid import cap
-- **Enable switch**: Toggle night charging on/off via an `input_boolean` helper
+- **Energy price control**: Only charges when the current energy price is below your configured maximum (€/kWh)
+- **Enable switch**: Toggle charging on/off via an `input_boolean` helper
 - **Same smart logic**: Lowers immediately, raises only after sustained headroom
 
 ## Blueprints
@@ -35,7 +36,7 @@ Manages charging overnight while keeping total grid import below a configurable 
 | Blueprint | File | Purpose |
 |-----------|------|---------|
 | Auto-Charge Dynamic Current | `auto_charge_dynamic_current.yaml` | Solar-based daytime charging |
-| Nightly Charge Dynamic Current | `night_charge_dynamic_current.yaml` | Grid-import-limited night charging |
+| Grid Charge | `grid_charge.yaml` | Grid-import-limited charging with energy price control |
 
 ## Installation
 
@@ -100,18 +101,20 @@ After setup, you get these sensors (example for Tri-Horária):
    - **Schedule Start/End**: Time window for solar charging (default: 09:00-22:00)
 6. Save the automation
 
-### Setting Up Nightly Charge
+### Setting Up Grid Charge
 
-1. **Create an `input_boolean` helper** first (if you haven't already created one for solar charging, you need a separate one for night charging):
+1. **Create an `input_boolean` helper** first (if you haven't already created one for solar charging, you need a separate one for grid charging):
    - Go to **Settings** > **Devices & Services** > **Helpers**
    - Click **"+ Create Helper"** > **"Toggle"**
-   - Name it something like "Night Charge Enable"
-   - This switch controls whether night charging is active
+   - Name it something like "Grid Charge Enable"
+   - This switch controls whether grid charging is active
 
 2. Go to **Settings** > **Automations & Scenes**
 3. Click **"+ Create Automation"** > **"Use a Blueprint"**
-4. Select **"Nightly Charge Dynamic Current"**
+4. Select **"Grid Charge"**
 5. Configure:
+   - **Energy Price Sensor**: Sensor showing current energy price in €/kWh
+   - **Maximum Energy Price**: Maximum price at which charging is allowed (default: 0.10 €/kWh)
    - **Power Sensor**: Grid power sensor (positive when importing)
    - **Max Current Entity**: Your charger's current control (number entity)
    - **Night Charge Enable Switch**: The `input_boolean` you created above
@@ -122,7 +125,7 @@ After setup, you get these sensors (example for Tri-Horária):
    - **Min Current**: Minimum charging current (default: 0A, max: 4A)
    - **Max Current**: Maximum charging current (default: 32A)
    - **Raise Delay**: Minutes to wait before raising current (default: 3 min)
-   - **Schedule Start/End**: Night charging window (default: 22:00-08:00)
+   - **Schedule Start/End**: Charging window (default: 22:00-08:00)
 6. Save the automation
 
 ## Requirements
@@ -133,10 +136,11 @@ After setup, you get these sensors (example for Tri-Horária):
 - An **`input_boolean` helper** to enable/disable solar charging
 - Charger must support dynamic current adjustment
 
-### For Nightly Charge:
+### For Grid Charge:
+- An **energy price sensor** showing the current price in €/kWh
 - A **power sensor** that shows grid import (positive when importing)
 - A **number entity** that controls max charging current
-- An **`input_boolean` helper** to enable/disable night charging
+- An **`input_boolean` helper** to enable/disable grid charging
 - Charger must support dynamic current adjustment
 
 ## How It Works
@@ -154,9 +158,9 @@ Every 20 seconds (during schedule window, if enable switch is ON):
    ELSE IF target > current AND stable for raise_delay → Raise
 ```
 
-### Nightly Charge Logic
+### Grid Charge Logic
 ```
-Every 20 seconds (during schedule window, if enable switch is ON):
+Every 20 seconds (during schedule window, if enable switch is ON and energy price ≤ max price):
 1. Read grid import and current charger amps
 2. Calculate charger draw = current_amps x voltage x phases
 3. Calculate base_load = max(grid_import - charger_draw, 0)
@@ -176,8 +180,8 @@ See [EXAMPLES.md](EXAMPLES.md) for detailed configuration examples covering sing
 - **Current Range**: 6-16A | **Raise Delay**: 3 min
 - At 3000W export, 6A current: target = (3000 + 1380 - 100) / 230 = **18A** (clamped to 16A)
 
-### Quick Example: Night Charge (3kW import limit)
-- **Max Import**: 3000W | **Buffer**: 400W | **Voltage**: 230V
+### Quick Example: Grid Charge (3kW import limit)
+- **Max Import**: 3000W | **Buffer**: 400W | **Voltage**: 230V | **Max Price**: 0.10 €/kWh
 - **Current Range**: 0-32A | **Raise Delay**: 3 min
 - At 500W base load: target = (3000 - 500 - 400) / 230 = **9A**
 
@@ -196,14 +200,15 @@ Works with any Home Assistant integrated charger that supports dynamic current c
 
 ### Current not adjusting?
 - Check that the **enable switch** (`input_boolean`) is turned ON
-- Check that power sensor is negative when exporting (solar blueprint) or positive when importing (night blueprint)
+- Check that power sensor is negative when exporting (solar blueprint) or positive when importing (grid charge blueprint)
 - Verify the max current entity is writable
 - Check automation traces in Home Assistant
 - Make sure you're within the schedule window
 
-### Night charging not working?
+### Grid charging not working?
 - Check that the **enable switch** (`input_boolean`) is turned ON
-- Verify the schedule window covers overnight (start > end is fine, e.g. 22:00-08:00)
+- Verify the current energy price is below your configured maximum
+- Verify the schedule window covers your desired period (start > end is fine, e.g. 22:00-08:00)
 - Check that `max_import_power` is set high enough for your needs
 
 ### Too much oscillation?

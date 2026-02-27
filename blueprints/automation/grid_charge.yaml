@@ -1,5 +1,5 @@
 blueprint:
-  name: Nightly Charge Dynamic Current
+  name: Grid Charge
   description: |
     Dynamically adjusts EV charging current to keep total grid import below a configurable limit.
     - Lowers current immediately when import exceeds limit
@@ -9,6 +9,24 @@ blueprint:
   domain: automation
   source_url: https://github.com/yourusername/auto-charge
   input:
+    energy_price_sensor:
+      name: Energy Price Sensor
+      description: Sensor that shows the current energy price (in €/kWh)
+      selector:
+        entity:
+          domain: sensor
+
+    max_energy_price:
+      name: Maximum Energy Price
+      description: Maximum energy price at which charging is allowed (in €/kWh)
+      default: 0.10
+      selector:
+        number:
+          min: 0.0
+          max: 1.0
+          step: 0.01
+          unit_of_measurement: "€/kWh"
+
     power_sensor:
       name: Power Sensor
       description: Grid power sensor (positive when importing from grid)

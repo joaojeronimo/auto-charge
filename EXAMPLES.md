@@ -101,18 +101,20 @@ Schedule End: 21:00:00
 
 ---
 
-## Nightly Charge Examples
+## Grid Charge Examples
 
-These examples use the **Nightly Charge Dynamic Current** blueprint for overnight charging within a grid import limit. All require an `input_boolean` helper for the enable switch.
+These examples use the **Grid Charge** blueprint for charging within a grid import limit and energy price cap. All require an `input_boolean` helper for the enable switch.
 
 ### Example 5: Standard Night Charge (3kW Import Limit)
 
 **Scenario:** Cheap overnight rate, 3kW import limit to avoid breaker trips, single-phase.
 
 ```yaml
-Power Sensor: sensor.grid_power               # Positive when importing
+Energy Price Sensor: sensor.coopernico_go_total  # Current price in €/kWh
+Maximum Energy Price: 0.10                       # Only charge below this price
+Power Sensor: sensor.grid_power                  # Positive when importing
 Max Current Entity: number.charger_charging_current
-Night Charge Enable Switch: input_boolean.night_charge_enable
+Night Charge Enable Switch: input_boolean.grid_charge_enable
 Maximum Import Power: 3000
 Voltage: 230
 Phases: 1
@@ -138,9 +140,11 @@ Schedule End: 06:00:00
 **Scenario:** Higher import allowance, three-phase charger, want to charge as fast as possible overnight.
 
 ```yaml
+Energy Price Sensor: sensor.coopernico_go_total  # Current price in €/kWh
+Maximum Energy Price: 0.15                       # Higher threshold for fast charging
 Power Sensor: sensor.grid_import_power
 Max Current Entity: number.wallbox_max_current
-Night Charge Enable Switch: input_boolean.night_charge_enable
+Night Charge Enable Switch: input_boolean.grid_charge_enable
 Maximum Import Power: 7000
 Voltage: 230
 Phases: 1
@@ -166,9 +170,11 @@ Schedule End: 07:00:00
 **Scenario:** Shared building supply, must keep total import very low, slow charging acceptable.
 
 ```yaml
+Energy Price Sensor: sensor.coopernico_go_total  # Current price in €/kWh
+Maximum Energy Price: 0.08                       # Very low price threshold
 Power Sensor: sensor.apartment_grid_power
 Max Current Entity: number.ev_max_current
-Night Charge Enable Switch: input_boolean.night_charge_enable
+Night Charge Enable Switch: input_boolean.grid_charge_enable
 Maximum Import Power: 2000
 Voltage: 230
 Phases: 1
@@ -238,10 +244,11 @@ When balanced: sensor should show near 0
 - Decrease Raise Delay (faster raising)
 - Decrease Min Current to 0 if your charger supports it
 
-### Problem: Night charging not activating
+### Problem: Grid charging not activating
 
 **Check:**
 - Is the **enable switch** (`input_boolean`) turned ON?
+- Is the current energy price below your configured **Maximum Energy Price**?
 - Is the current time within the schedule window?
 - Is `max_import_power` set high enough? If base load exceeds the limit, target will be 0.
 
@@ -270,7 +277,7 @@ The formula adds back the charger's current draw because the grid export sensor 
 - 1000W export, 0A current: (1000 + 0 - 100) / 230 = **3A**
 - 500W export, 10A current: (500 + 2300 - 100) / 230 = **11A**
 
-### Nightly Charge
+### Grid Charge
 ```
 charger_draw = current_amps x voltage x phases
 base_load = max(grid_import - charger_draw, 0)
