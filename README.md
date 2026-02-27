@@ -125,7 +125,6 @@ After setup, you get these sensors (example for Tri-Horária):
    - **Min Current**: Minimum charging current (default: 0A, max: 4A)
    - **Max Current**: Maximum charging current (default: 32A)
    - **Raise Delay**: Minutes to wait before raising current (default: 3 min)
-   - **Schedule Start/End**: Charging window (default: 22:00-08:00)
 6. Save the automation
 
 ## Requirements
@@ -160,7 +159,7 @@ Every 20 seconds (during schedule window, if enable switch is ON):
 
 ### Grid Charge Logic
 ```
-Every 20 seconds (during schedule window, if enable switch is ON and energy price ≤ max price):
+Every 20 seconds (if enable switch is ON and energy price ≤ max price):
 1. Read grid import and current charger amps
 2. Calculate charger draw = current_amps x voltage x phases
 3. Calculate base_load = max(grid_import - charger_draw, 0)
@@ -208,7 +207,6 @@ Works with any Home Assistant integrated charger that supports dynamic current c
 ### Grid charging not working?
 - Check that the **enable switch** (`input_boolean`) is turned ON
 - Verify the current energy price is below your configured maximum
-- Verify the schedule window covers your desired period (start > end is fine, e.g. 22:00-08:00)
 - Check that `max_import_power` is set high enough for your needs
 
 ### Too much oscillation?

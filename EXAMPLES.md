@@ -122,8 +122,6 @@ Power Buffer: 400    # Safety margin below limit
 Min Current: 0
 Max Current: 16
 Raise Delay: 3
-Schedule Start: 22:00:00
-Schedule End: 06:00:00
 ```
 
 **How it calculates** (at 800W household load, currently charging at 6A):
@@ -152,8 +150,6 @@ Power Buffer: 500
 Min Current: 6
 Max Current: 32
 Raise Delay: 3
-Schedule Start: 23:00:00
-Schedule End: 07:00:00
 ```
 
 **How it calculates** (at 1000W household load, currently charging at 16A):
@@ -182,8 +178,6 @@ Power Buffer: 500
 Min Current: 0
 Max Current: 10
 Raise Delay: 5
-Schedule Start: 00:00:00
-Schedule End: 06:00:00
 ```
 
 ---

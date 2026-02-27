@@ -116,7 +116,6 @@ These toggle switches let you turn each charging mode on and off independently. 
    - **Min Current**: Minimum amps (e.g., `0`)
    - **Max Current**: Maximum amps (e.g., `32`)
    - **Raise Delay**: Minutes to wait before raising current (e.g., `3`)
-   - **Schedule Start/End**: Charging window (e.g., `22:00` to `08:00`)
 4. Click **"Save"** and give it a name
 
 ## Troubleshooting
