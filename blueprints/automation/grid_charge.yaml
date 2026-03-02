@@ -77,10 +77,10 @@ blueprint:
     power_buffer:
       name: Power Buffer
       description: Safety buffer to stay below import limit (prevents exceeding limit)
-      default: 100
+      default: 400
       selector:
         number:
-          min: 400
+          min: 100
           max: 2000
           step: 50
           unit_of_measurement: "W"
@@ -136,6 +136,8 @@ variables:
   power_sensor_entity: !input power_sensor
   max_current_entity_id: !input max_current_entity
   enable_switch_entity: !input enable_switch
+  energy_price_entity: !input energy_price_sensor
+  cfg_max_energy_price: !input max_energy_price
 
 trigger:
   - id: "adjust_current"
@@ -152,19 +154,27 @@ condition:
 
 action:
   - variables:
+      price_ok: >
+        {{ states(energy_price_entity) not in ['unavailable', 'unknown', 'none']
+           and states(energy_price_entity) | float(0) <= cfg_max_energy_price | float(0) }}
       power_import: "{{ states(power_sensor_entity) | float(0) }}"
       current_max_amps: "{{ states(max_current_entity_id) | float(0) }}"
   - variables:
       target_amps: >
-        {% set power_import = power_import | float(0) %}
-        {% set charger_draw = current_max_amps | float(0) * cfg_voltage * cfg_phases %}
-        {% set base_load = [power_import - charger_draw, 0] | max %}
-        {% set available_watts = cfg_max_import_power - base_load - cfg_power_buffer %}
-        {% set target = (available_watts / (cfg_voltage * cfg_phases)) | int %}
-        {{ [[target, cfg_max_current] | min, cfg_min_current] | max }}
+        {% set price_ok = price_ok | bool(false) %}
+        {% if not price_ok %}
+          {{ cfg_min_current }}
+        {% else %}
+          {% set power_import = power_import | float(0) %}
+          {% set charger_draw = current_max_amps | float(0) * cfg_voltage * cfg_phases %}
+          {% set base_load = [power_import - charger_draw, 0] | max %}
+          {% set available_watts = cfg_max_import_power - base_load - cfg_power_buffer %}
+          {% set target = (available_watts / (cfg_voltage * cfg_phases)) | int %}
+          {{ [[target, cfg_max_current] | min, cfg_min_current] | max }}
+        {% endif %}
 
   - choose:
-      # LOWER immediately when over the import limit
+      # LOWER immediately when over the import limit or price too high
       - conditions:
           - condition: template
             value_template: "{{ target_amps | int < current_max_amps | int }}"
@@ -175,11 +185,11 @@ action:
             data:
               value: "{{ target_amps }}"
 
-      # RAISE only after sustained headroom (raise_delay minutes since last change)
+      # RAISE only after sustained headroom (raise_delay minutes since last change) and price is OK
       - conditions:
           - condition: template
             value_template: >
-              {{ target_amps | int > current_max_amps | int
+              {{ (price_ok | bool(false)) and target_amps | int > current_max_amps | int
                  and (as_timestamp(now()) - as_timestamp(states[max_current_entity_id].last_changed)) > (cfg_raise_delay * 60) }}
         sequence:
           - service: number.set_value
