@@ -6,6 +6,9 @@ blueprint:
 
     Designed for Coopernico Go (Coperni Go) tariff periods: Vazio, Ponta, Cheio.
     Example use case: charge the battery during cheap Vazio hours before Ponta begins.
+
+    Requires that your tariff period sensor exposes "next_tariff" and "next_change"
+    attributes (common in Coperni Go integrations). Adjust attribute names if needed.
   domain: automation
   source_url: https://github.com/yourusername/auto-charge
   input:
@@ -74,23 +77,22 @@ blueprint:
       selector:
         action:
 
+    charging_state_helper:
+      name: Charging State Helper
+      description: >
+        An input_boolean to track whether this automation started a charge.
+        Create one in Settings > Helpers (e.g. input_boolean.battery_precharge_active).
+        This prevents the stop service from being called repeatedly.
+      selector:
+        entity:
+          domain: input_boolean
+
     enable_switch:
       name: Enable Switch
       description: Toggle switch to enable/disable this automation (input_boolean)
       selector:
         entity:
           domain: input_boolean
-
-    check_interval:
-      name: Check Interval
-      description: How often to re-evaluate conditions (in minutes)
-      default: 5
-      selector:
-        number:
-          min: 1
-          max: 30
-          step: 1
-          unit_of_measurement: "min"
 
 variables:
   energy_price_entity: !input energy_price_sensor
@@ -99,11 +101,12 @@ variables:
   cfg_target_tariff: !input target_tariff_period
   cfg_time_before: !input time_before_period
   enable_switch_entity: !input enable_switch
+  charging_state_entity: !input charging_state_helper
 
 trigger:
   - id: "periodic_check"
     platform: time_pattern
-    minutes: !input check_interval
+    minutes: "/5"
 
   - id: "tariff_changed"
     platform: state
@@ -125,15 +128,18 @@ action:
   - variables:
       current_price: "{{ states(energy_price_entity) | float(999) }}"
       current_tariff: "{{ states(tariff_period_entity) | lower | trim }}"
-      price_is_low: "{{ current_price <= cfg_price_threshold | float(0) }}"
-      is_target_period: "{{ current_tariff == cfg_target_tariff | lower | trim }}"
+      target_tariff: "{{ cfg_target_tariff | lower | trim }}"
       next_period_attr: "{{ state_attr(tariff_period_entity, 'next_tariff') | default('') | lower | trim }}"
       next_change_str: "{{ state_attr(tariff_period_entity, 'next_change') | default('') }}"
+      is_charging: "{{ states(charging_state_entity) == 'on' }}"
+
   - variables:
+      price_is_low: "{{ current_price | float(999) <= cfg_price_threshold | float(0) }}"
+      is_target_period: "{{ current_tariff == target_tariff }}"
       minutes_until_target: >
-        {% if is_target_period %}
+        {% if current_tariff == target_tariff %}
           0
-        {% elif next_period_attr == cfg_target_tariff | lower | trim and next_change_str != '' %}
+        {% elif next_period_attr == target_tariff and next_change_str != '' %}
           {% set next_ts = as_timestamp(next_change_str, default=0) %}
           {% if next_ts > 0 %}
             {{ ((next_ts - as_timestamp(now())) / 60) | round(0) }}
@@ -143,9 +149,11 @@ action:
         {% else %}
           9999
         {% endif %}
+
+  - variables:
       should_charge: >
         {{ price_is_low | bool(false)
-           and not is_target_period
+           and not (is_target_period | bool(false))
            and minutes_until_target | int(9999) <= cfg_time_before | int(60)
            and minutes_until_target | int(9999) > 0 }}
 
@@ -153,13 +161,21 @@ action:
       # START charging: price is low and within time window before target period
       - conditions:
           - condition: template
-            value_template: "{{ should_charge | bool(false) }}"
-        sequence: !input charge_service
+            value_template: "{{ should_charge | bool(false) and not is_charging }}"
+        sequence:
+          - action: input_boolean.turn_on
+            target:
+              entity_id: !input charging_state_helper
+          - !input charge_service
 
-      # STOP charging: conditions no longer met (price too high, target period started, or outside window)
+      # STOP charging: was charging but conditions no longer met
       - conditions:
           - condition: template
-            value_template: "{{ not (should_charge | bool(false)) }}"
-        sequence: !input stop_charge_service
+            value_template: "{{ not (should_charge | bool(false)) and is_charging }}"
+        sequence:
+          - action: input_boolean.turn_off
+            target:
+              entity_id: !input charging_state_helper
+          - !input stop_charge_service
 
 mode: single

@@ -203,12 +203,11 @@ class CoopernicoPeriodSensor(CoopernicoBaseSensor):
     """Shows the current tariff period."""
 
     _attr_icon = "mdi:clock-outline"
-    _attr_translation_key = "period"
+    _attr_name = "Period"
 
     def __init__(self, entry, omie_entity, tariff, device_info):
         super().__init__(entry, omie_entity, device_info)
         self._tariff = tariff
-        tariff_label = TARIFF_OPTIONS[tariff]
         self._attr_unique_id = f"{entry.entry_id}_period"
 
     def _update_state(self) -> None:
@@ -230,7 +229,7 @@ class CoopernicoEnergySensor(CoopernicoPriceSensor):
     """Coopernico energy component (before TAR & taxes)."""
 
     _attr_icon = "mdi:lightning-bolt"
-    _attr_translation_key = "energy"
+    _attr_name = "Energy price"
 
     def __init__(self, entry, omie_entity, device_info):
         super().__init__(entry, omie_entity, device_info)
@@ -248,7 +247,7 @@ class CoopernicoTarSensor(CoopernicoPriceSensor):
     """Current TAR value."""
 
     _attr_icon = "mdi:transmission-tower"
-    _attr_translation_key = "tar"
+    _attr_name = "TAR"
 
     def __init__(self, entry, omie_entity, tariff, device_info):
         super().__init__(entry, omie_entity, device_info)
@@ -265,7 +264,7 @@ class CoopernicoTotalSensor(CoopernicoPriceSensor):
     """Total price before IVA (energy + TAR + regulated costs)."""
 
     _attr_icon = "mdi:currency-eur"
-    _attr_translation_key = "total"
+    _attr_name = "Total"
 
     def __init__(self, entry, omie_entity, tariff, device_info):
         super().__init__(entry, omie_entity, device_info)
@@ -288,7 +287,7 @@ class CoopernicoIva6Sensor(CoopernicoPriceSensor):
     """Total price with IVA 6% (first 200 kWh/month, <= 6.9 kVA)."""
 
     _attr_icon = "mdi:currency-eur"
-    _attr_translation_key = "total_iva6"
+    _attr_name = "Total c/ IVA 6%"
 
     def __init__(self, entry, omie_entity, tariff, device_info):
         super().__init__(entry, omie_entity, device_info)
@@ -315,7 +314,7 @@ class CoopernicoIva23Sensor(CoopernicoPriceSensor):
     """Total price with IVA 23% (beyond 200 kWh/month)."""
 
     _attr_icon = "mdi:currency-eur"
-    _attr_translation_key = "total_iva23"
+    _attr_name = "Total c/ IVA 23%"
 
     def __init__(self, entry, omie_entity, tariff, device_info):
         super().__init__(entry, omie_entity, device_info)
