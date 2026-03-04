@@ -21,7 +21,7 @@
   "entity": {
     "sensor": {
       "period": { "name": "Período" },
-      "energy": { "name": "Energia" },
+      "energy": { "name": "Preço energia" },
       "tar": { "name": "TAR" },
       "total": { "name": "Total" },
       "total_iva6": { "name": "Total c/ IVA 6%" },

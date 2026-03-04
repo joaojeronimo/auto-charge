@@ -5,7 +5,6 @@ from __future__ import annotations
 from datetime import datetime
 
 from homeassistant.components.sensor import (
-    SensorDeviceClass,
     SensorEntity,
     SensorStateClass,
 )
@@ -223,7 +222,6 @@ class CoopernicoPriceSensor(CoopernicoBaseSensor):
     """Base for price sensors (€/kWh)."""
 
     _attr_native_unit_of_measurement = "€/kWh"
-    _attr_device_class = SensorDeviceClass.MONETARY
     _attr_state_class = SensorStateClass.MEASUREMENT
     _attr_suggested_display_precision = 4
 
