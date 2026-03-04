@@ -111,7 +111,7 @@ blueprint:
       name: Battery Power Sensor
       description: >
         Battery charge/discharge power sensor.
-        Positive = charging (absorbing solar), Negative = discharging (feeding house).
+        Positive = discharging (feeding house), Negative = charging (absorbing solar).
         Used to prevent draining the home battery to charge the car.
       selector:
         entity:
@@ -168,9 +168,9 @@ action:
   - variables:
       target_amps: >
         {% set bat = battery_power | float(0) %}
-        {# If battery is discharging (negative), subtract it from export so we don't drain battery for the car #}
-        {% set battery_adj = [bat, 0] | min %}
-        {% set power_export = raw_power_export | float(0) - battery_adj %}
+        {# If battery is discharging (positive), subtract it from export so we don't drain battery for the car #}
+        {% set battery_adj = [bat, 0] | max %}
+        {% set power_export = raw_power_export | float(0) + battery_adj %}
         {% set cur = current_max_amps | float(0) %}
         {% set wpc = cfg_voltage * cfg_phases %}
         {% if power_export < 0 %}
