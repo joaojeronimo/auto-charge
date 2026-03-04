@@ -1,0 +1,218 @@
+blueprint:
+  name: Manual Grid Charge
+  description: |
+    Manually triggered EV grid charging with home battery discharge protection.
+    - Press the configured button to start grid charging
+    - Automatically calls a configurable service to stop home battery discharge
+    - Dynamically adjusts charging current to stay below a configurable import limit
+    - Press the button again or turn off the enable switch to stop
+    - On stop, calls a configurable service to restore battery discharge
+  domain: automation
+  source_url: https://github.com/yourusername/auto-charge
+  input:
+    trigger_button:
+      name: Trigger Button
+      description: Button entity that toggles manual grid charging on/off
+      selector:
+        entity:
+          domain: input_boolean
+
+    stop_discharge_service:
+      name: Stop Battery Discharge Service
+      description: >
+        Service to call when charging starts, to prevent the home battery from discharging
+        (e.g. a custom service like huawei_solar.force_charge, or switch.turn_on)
+      selector:
+        action:
+
+    restore_discharge_service:
+      name: Restore Battery Discharge Service
+      description: >
+        Service to call when charging stops, to restore normal battery behaviour
+        (e.g. switch.turn_off, or a custom service)
+      selector:
+        action:
+
+    power_sensor:
+      name: Power Sensor
+      description: Grid power sensor (positive when importing from grid)
+      selector:
+        entity:
+          domain: sensor
+          device_class: power
+
+    max_current_entity:
+      name: Maximum Current Control
+      description: Number entity that controls the charger's maximum current
+      selector:
+        entity:
+          domain: number
+
+    max_import_power:
+      name: Maximum Import Power
+      description: Maximum allowed grid import power (in Watts)
+      default: 3000
+      selector:
+        number:
+          min: 500
+          max: 15000
+          step: 100
+          unit_of_measurement: "W"
+
+    voltage:
+      name: Grid Voltage
+      description: Your grid voltage (typically 230V or 240V)
+      default: 230
+      selector:
+        number:
+          min: 100
+          max: 250
+          step: 1
+          unit_of_measurement: "V"
+
+    phases:
+      name: Number of Phases
+      description: Number of phases your charger uses (1 for single-phase, 3 for three-phase)
+      default: 1
+      selector:
+        number:
+          min: 1
+          max: 3
+          step: 1
+
+    power_buffer:
+      name: Power Buffer
+      description: Safety buffer to stay below import limit (prevents exceeding limit)
+      default: 400
+      selector:
+        number:
+          min: 100
+          max: 2000
+          step: 50
+          unit_of_measurement: "W"
+
+    min_current:
+      name: Minimum Current
+      description: Minimum charging current (usually 0 or 6A depending on charger)
+      default: 0
+      selector:
+        number:
+          min: 0
+          max: 4
+          step: 1
+          unit_of_measurement: "A"
+
+    max_current:
+      name: Maximum Current
+      description: Maximum charging current (typically 16A or 32A)
+      default: 32
+      selector:
+        number:
+          min: 6
+          max: 32
+          step: 1
+          unit_of_measurement: "A"
+
+    raise_delay:
+      name: Raise Delay
+      description: Wait time before raising current (prevents reacting to temporary drops in import)
+      default: 3
+      selector:
+        number:
+          min: 1
+          max: 10
+          step: 1
+          unit_of_measurement: "min"
+
+variables:
+  cfg_max_import_power: !input max_import_power
+  cfg_voltage: !input voltage
+  cfg_phases: !input phases
+  cfg_power_buffer: !input power_buffer
+  cfg_min_current: !input min_current
+  cfg_max_current: !input max_current
+  cfg_raise_delay: !input raise_delay
+  power_sensor_entity: !input power_sensor
+  max_current_entity_id: !input max_current_entity
+  trigger_button_entity: !input trigger_button
+
+trigger:
+  - id: "button_toggled"
+    platform: state
+    entity_id: !input trigger_button
+
+  - id: "adjust_current"
+    platform: time_pattern
+    seconds: "/20"
+
+condition: []
+
+action:
+  - choose:
+      # Button turned ON → stop battery discharge and start charging
+      - conditions:
+          - condition: trigger
+            id: "button_toggled"
+          - condition: template
+            value_template: "{{ states(trigger_button_entity) == 'on' }}"
+        sequence: !input stop_discharge_service
+
+      # Button turned OFF → restore battery discharge and set charger to min
+      - conditions:
+          - condition: trigger
+            id: "button_toggled"
+          - condition: template
+            value_template: "{{ states(trigger_button_entity) == 'off' }}"
+        sequence:
+          - action: number.set_value
+            target:
+              entity_id: !input max_current_entity
+            data:
+              value: "{{ cfg_min_current }}"
+          - sequence: !input restore_discharge_service
+
+    # Default: periodic current adjustment (only when button is on)
+    default:
+      - condition: template
+        value_template: "{{ states(trigger_button_entity) == 'on' }}"
+      - condition: template
+        value_template: >
+          {{ states(power_sensor_entity) not in ['unavailable', 'unknown', 'none']
+             and states(max_current_entity_id) not in ['unavailable', 'unknown', 'none'] }}
+      - variables:
+          power_import: "{{ states(power_sensor_entity) | float(0) }}"
+          current_max_amps: "{{ states(max_current_entity_id) | float(0) }}"
+      - variables:
+          target_amps: >
+            {% set power_import = power_import | float(0) %}
+            {% set charger_draw = current_max_amps | float(0) * cfg_voltage * cfg_phases %}
+            {% set base_load = [power_import - charger_draw, 0] | max %}
+            {% set available_watts = cfg_max_import_power - base_load - cfg_power_buffer %}
+            {% set target = (available_watts / (cfg_voltage * cfg_phases)) | int %}
+            {{ [[target, cfg_max_current] | min, cfg_min_current] | max }}
+      - choose:
+          # LOWER immediately when over the import limit
+          - conditions:
+              - condition: template
+                value_template: "{{ target_amps | int < current_max_amps | int }}"
+            sequence:
+              - action: number.set_value
+                target:
+                  entity_id: !input max_current_entity
+                data:
+                  value: "{{ target_amps }}"
+
+          # RAISE only after sustained headroom
+          - conditions:
+              - condition: template
+                value_template: >
+                  {{ target_amps | int > current_max_amps | int
+                     and (as_timestamp(now()) - as_timestamp(states[max_current_entity_id].last_changed)) > (cfg_raise_delay * 60) }}
+            sequence:
+              - action: number.set_value
+                target:
+                  entity_id: !input max_current_entity
+                data:
+                  value: "{{ target_amps }}"
+
+mode: single
