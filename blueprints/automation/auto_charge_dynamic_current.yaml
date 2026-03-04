@@ -8,6 +8,7 @@ blueprint:
     - Only drops to minimum after 20s of sustained grid import (ignores brief clouds)
     - Raises current only after sustained high export (stable)
     - Formula: Target Amps = (Exported Power - Buffer) / (Voltage × Phases)
+    - Accounts for home battery discharge (won't drain battery to charge car)
     - Keeps current between configurable min/max limits
   domain: automation
   source_url: https://github.com/yourusername/auto-charge
@@ -106,6 +107,17 @@ blueprint:
         entity:
           domain: input_boolean
 
+    battery_power_sensor:
+      name: Battery Power Sensor
+      description: >
+        Battery charge/discharge power sensor.
+        Positive = charging (absorbing solar), Negative = discharging (feeding house).
+        Used to prevent draining the home battery to charge the car.
+      selector:
+        entity:
+          domain: sensor
+          device_class: power
+
     schedule_end:
       name: Schedule End Time
       description: End time for charging window
@@ -123,6 +135,7 @@ variables:
   power_sensor_entity: !input power_sensor
   max_current_entity_id: !input max_current_entity
   enable_switch_entity: !input enable_switch
+  battery_power_entity: !input battery_power_sensor
 
 trigger:
   - platform: time_pattern
@@ -144,15 +157,20 @@ condition:
   - condition: template
     value_template: >
       {{ states(power_sensor_entity) not in ['unavailable', 'unknown', 'none']
-         and states(max_current_entity_id) not in ['unavailable', 'unknown', 'none'] }}
+         and states(max_current_entity_id) not in ['unavailable', 'unknown', 'none']
+         and states(battery_power_entity) not in ['unavailable', 'unknown', 'none'] }}
 
 action:
   - variables:
-      power_export: "{{ states(power_sensor_entity) | float(0) }}"
+      raw_power_export: "{{ states(power_sensor_entity) | float(0) }}"
+      battery_power: "{{ states(battery_power_entity) | float(0) }}"
       current_max_amps: "{{ states(max_current_entity_id) | float(0) }}"
   - variables:
       target_amps: >
-        {% set power_export = power_export | float(0) %}
+        {% set bat = battery_power | float(0) %}
+        {# If battery is discharging (negative), subtract it from export so we don't drain battery for the car #}
+        {% set battery_adj = [bat, 0] | min %}
+        {% set power_export = raw_power_export | float(0) - battery_adj %}
         {% set cur = current_max_amps | float(0) %}
         {% set wpc = cfg_voltage * cfg_phases %}
         {% if power_export < 0 %}
@@ -182,7 +200,7 @@ action:
           - condition: template
             value_template: >
               {{ target_amps | int < current_max_amps | int
-                 and (power_export | float(0) < 0 or trigger.id == 'sustained_import') }}
+                 and (raw_power_export | float(0) < 0 or trigger.id == 'sustained_import') }}
         sequence:
           - service: number.set_value
             target:
