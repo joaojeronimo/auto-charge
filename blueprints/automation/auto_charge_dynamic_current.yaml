@@ -2,7 +2,9 @@ blueprint:
   name: Auto-Charge Dynamic Current Adjustment
   description: |
     Dynamically adjusts EV charging current based on available solar export power.
+    - Cold start: begins at ~50% of available export to avoid overshoot oscillation
     - Lowers current immediately when export drops while still exporting
+    - Import: reduces proportionally (not to zero) to avoid stop/start jitter
     - Only drops to minimum after 20s of sustained grid import (ignores brief clouds)
     - Raises current only after sustained high export (stable)
     - Formula: Target Amps = (Exported Power - Buffer) / (Voltage × Phases)
@@ -151,13 +153,25 @@ action:
   - variables:
       target_amps: >
         {% set power_export = power_export | float(0) %}
+        {% set cur = current_max_amps | float(0) %}
+        {% set wpc = cfg_voltage * cfg_phases %}
         {% if power_export < 0 %}
-          {% set charger_draw = current_max_amps | float(0) * cfg_voltage * cfg_phases %}
+          {% set charger_draw = cur * wpc %}
           {% set available_watts = (power_export | abs) + charger_draw - cfg_power_buffer %}
-          {% set calculated_amps = (available_watts / (cfg_voltage * cfg_phases)) | int %}
-          {{ [[calculated_amps, cfg_max_current] | min, cfg_min_current] | max | int }}
+          {% set calculated_amps = (available_watts / wpc) | int %}
+          {% if cur | int <= cfg_min_current | int %}
+            {# Cold start: charger isn't drawing yet, so be conservative (50%) to avoid overshoot #}
+            {% set start_amps = (((power_export | abs) - cfg_power_buffer) / wpc * 0.5) | int %}
+            {{ [[start_amps, cfg_max_current] | min, [6, cfg_min_current] | max] | max | int }}
+          {% else %}
+            {{ [[calculated_amps, cfg_max_current] | min, cfg_min_current] | max | int }}
+          {% endif %}
         {% else %}
-          {{ cfg_min_current }}
+          {# Importing: reduce proportionally rather than dropping to min #}
+          {% set import_watts = power_export + cfg_power_buffer %}
+          {% set reduce_amps = (import_watts / wpc) | round(0, 'ceil') | int + 1 %}
+          {% set gentle_target = cur | int - reduce_amps %}
+          {{ [[gentle_target, cfg_max_current] | min, cfg_min_current] | max | int }}
         {% endif %}
 
   - choose:
