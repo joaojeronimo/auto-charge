@@ -95,7 +95,6 @@ These toggle switches let you turn each charging mode on and off independently. 
    - **Power Buffer**: Safety margin in Watts (e.g., `100`)
    - **Min Current**: Minimum amps (e.g., `0` or `6` depending on your charger)
    - **Max Current**: Maximum amps (e.g., `16` or `32`)
-   - **Raise Delay**: Minutes to wait before raising current (e.g., `3`)
    - **Schedule Start/End**: Time window for solar charging (e.g., `09:00` to `22:00`)
 4. Click **"Save"** and give it a name
 

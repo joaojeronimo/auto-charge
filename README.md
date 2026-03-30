@@ -97,7 +97,6 @@ After setup, you get these sensors (example for Tri-Horária):
    - **Power Buffer**: Safety margin to avoid grid import (default: 100W)
    - **Min Current**: Minimum charging current (default: 0A)
    - **Max Current**: Maximum charging current (default: 32A)
-   - **Raise Delay**: Minutes to wait before raising current (default: 3 min)
    - **Schedule Start/End**: Time window for solar charging (default: 09:00-22:00)
 6. Save the automation
 
@@ -154,7 +153,7 @@ Every 20 seconds (during schedule window, if enable switch is ON):
 5. Clamp between min_current and max_current
 6. IF target < current AND still exporting → Lower immediately
    ELSE IF importing for 20+ seconds → Drop to minimum
-   ELSE IF target > current AND stable for raise_delay → Raise
+   ELSE IF target > current → Raise on the next cycle
 ```
 
 ### Grid Charge Logic
@@ -176,7 +175,7 @@ See [EXAMPLES.md](EXAMPLES.md) for detailed configuration examples covering sing
 
 ### Quick Example: Single-Phase Solar (230V)
 - **Voltage**: 230V | **Phases**: 1 | **Buffer**: 100W
-- **Current Range**: 6-16A | **Raise Delay**: 3 min
+- **Current Range**: 6-16A
 - At 3000W export, 6A current: target = (3000 + 1380 - 100) / 230 = **18A** (clamped to 16A)
 
 ### Quick Example: Grid Charge (3kW import limit)
@@ -210,7 +209,7 @@ Works with any Home Assistant integrated charger that supports dynamic current c
 - Check that `max_import_power` is set high enough for your needs
 
 ### Too much oscillation?
-- Increase **Raise Delay** (e.g., 5-10 minutes)
+- For grid charging, increase **Raise Delay** (e.g., 5-10 minutes)
 - Increase **Power Buffer** (e.g., 200-500W)
 
 ### Importing from grid during solar charging?

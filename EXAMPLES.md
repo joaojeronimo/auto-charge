@@ -19,7 +19,6 @@ Phases: 1
 Power Buffer: 150    # Conservative buffer
 Min Current: 6       # Typical minimum for most chargers
 Max Current: 16      # Single-phase max
-Raise Delay: 5       # Wait 5 minutes before raising
 Schedule Start: 09:00:00
 Schedule End: 22:00:00
 ```
@@ -44,7 +43,6 @@ Phases: 3
 Power Buffer: 100    # Tight buffer for good tracking
 Min Current: 0       # Can stop charging if needed
 Max Current: 32      # Three-phase max
-Raise Delay: 3       # Standard raise delay
 Schedule Start: 08:00:00
 Schedule End: 20:00:00
 ```
@@ -69,7 +67,6 @@ Phases: 1
 Power Buffer: 500    # Very large buffer!
 Min Current: 0       # Will stop if not enough export
 Max Current: 32
-Raise Delay: 10      # Very conservative, wait 10 min
 Schedule Start: 08:00:00
 Schedule End: 18:00:00
 ```
@@ -94,7 +91,6 @@ Phases: 1
 Power Buffer: 50     # Minimal buffer
 Min Current: 6       # Keep charging active
 Max Current: 32
-Raise Delay: 2       # Quick to raise
 Schedule Start: 07:00:00
 Schedule End: 21:00:00
 ```
@@ -222,20 +218,19 @@ When balanced: sensor should show near 0
 
 **Check:**
 - The formula accounts for current charger draw. If the target seems low, check that the power sensor is reading correctly.
-- Raise delay may be preventing the increase — wait for the configured delay period.
+- Check that your power sensor updates frequently enough to reflect the extra export.
 - Check automation traces to see calculated `target_amps` vs `current_max_amps`.
 
 ### Problem: Too much grid import during solar charging
 
 **Fix:**
 - Increase Power Buffer (try 300-500W)
-- Increase Raise Delay (more conservative raising)
+- Check that the power sensor sign and update rate are correct if import spikes linger
 
 ### Problem: Not using enough solar
 
 **Fix:**
 - Decrease Power Buffer (try 50-100W)
-- Decrease Raise Delay (faster raising)
 - Decrease Min Current to 0 if your charger supports it
 
 ### Problem: Grid charging not activating
@@ -249,7 +244,7 @@ When balanced: sensor should show near 0
 ### Problem: Charging stops and starts frequently
 
 **Fix:**
-- Increase Raise Delay (prevents oscillation)
+- For grid charging, increase Raise Delay (prevents oscillation)
 - Increase Power Buffer (more stable)
 - Increase Min Current (keeps charging active)
 

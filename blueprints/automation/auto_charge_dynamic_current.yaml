@@ -2,11 +2,11 @@ blueprint:
   name: Auto-Charge Dynamic Current Adjustment
   description: |
     Dynamically adjusts EV charging current based on available solar export power.
-    - Cold start: begins at ~50% of available export to avoid overshoot oscillation
+    - Cold start: begins at ~75% of available export to reduce sluggish starts
     - Lowers current immediately when export drops while still exporting
     - Import: reduces proportionally (not to zero) to avoid stop/start jitter
     - Only drops to minimum after 20s of sustained grid import (ignores brief clouds)
-    - Raises current only after sustained high export (stable)
+    - Raises current immediately on the next adjustment cycle when more solar is available
     - Formula: Target Amps = (Exported Power - Buffer) / (Voltage × Phases)
     - Accounts for home battery discharge (won't drain battery to charge car)
     - Keeps current between configurable min/max limits
@@ -82,17 +82,6 @@ blueprint:
           step: 1
           unit_of_measurement: "A"
 
-    raise_delay:
-      name: Raise Delay
-      description: Wait time before raising current (prevents oscillation)
-      default: 3
-      selector:
-        number:
-          min: 1
-          max: 10
-          step: 1
-          unit_of_measurement: "min"
-
     schedule_start:
       name: Schedule Start Time
       description: Start time for charging window
@@ -131,7 +120,6 @@ variables:
   cfg_power_buffer: !input power_buffer
   cfg_min_current: !input min_current
   cfg_max_current: !input max_current
-  cfg_raise_delay: !input raise_delay
   power_sensor_entity: !input power_sensor
   max_current_entity_id: !input max_current_entity
   enable_switch_entity: !input enable_switch
@@ -166,20 +154,22 @@ action:
       battery_power: "{{ states(battery_power_entity) | float(0) }}"
       current_max_amps: "{{ states(max_current_entity_id) | float(0) }}"
   - variables:
-      target_amps: >
+      watts_per_amp: "{{ (cfg_voltage | float(0)) * (cfg_phases | float(0)) }}"
+      effective_power_export: >
         {% set bat = battery_power | float(0) %}
-        {# If battery is discharging (positive), subtract it from export so we don't drain battery for the car #}
         {% set battery_adj = [bat, 0] | max %}
-        {% set power_export = raw_power_export | float(0) + battery_adj %}
+        {{ raw_power_export | float(0) + battery_adj }}
+      target_amps: >
+        {% set power_export = effective_power_export | float(0) %}
         {% set cur = current_max_amps | float(0) %}
-        {% set wpc = cfg_voltage * cfg_phases %}
+        {% set wpc = watts_per_amp | float(1) %}
         {% if power_export < 0 %}
           {% set charger_draw = cur * wpc %}
           {% set available_watts = (power_export | abs) + charger_draw - cfg_power_buffer %}
           {% set calculated_amps = (available_watts / wpc) | int %}
           {% if cur | int <= cfg_min_current | int %}
-            {# Cold start: charger isn't drawing yet, so be conservative (50%) to avoid overshoot #}
-            {% set start_amps = (((power_export | abs) - cfg_power_buffer) / wpc * 0.5) | int %}
+            {# Cold start: leave some headroom, but ramp faster than the original 50% start #}
+            {% set start_amps = (((power_export | abs) - cfg_power_buffer) / wpc * 0.75) | int %}
             {{ [[start_amps, cfg_max_current] | min, [6, cfg_min_current] | max] | max | int }}
           {% else %}
             {{ [[calculated_amps, cfg_max_current] | min, cfg_min_current] | max | int }}
@@ -191,7 +181,6 @@ action:
           {% set gentle_target = cur | int - reduce_amps %}
           {{ [[gentle_target, cfg_max_current] | min, cfg_min_current] | max | int }}
         {% endif %}
-
   - choose:
       # Case 1: LOWER current
       # - If still exporting (power < 0): adjust proportionally on periodic check
@@ -208,14 +197,12 @@ action:
             data:
               value: "{{ target_amps }}"
 
-      # Case 2: RAISE current (only after sustained high export)
-      # Only raise if target is higher AND the current setting has been stable
-      # (not lowered) for raise_delay minutes, indicating sustained export
+      # Case 2: RAISE current
+      # Raise immediately on the next adjustment cycle when more surplus is available
       - conditions:
           - condition: template
             value_template: >
-              {{ target_amps | int > current_max_amps | int
-                 and (as_timestamp(now()) - as_timestamp(states[max_current_entity_id].last_changed)) > (cfg_raise_delay * 60) }}
+              {{ target_amps | int > current_max_amps | int }}
         sequence:
           - service: number.set_value
             target:
