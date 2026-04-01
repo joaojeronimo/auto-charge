@@ -58,6 +58,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added **Energy Price Sensor** input — sensor showing current energy price in €/kWh
 - Added **Maximum Energy Price** input — configurable price cap for charging (default: 0.10 €/kWh)
 - Removed schedule start/end time inputs from Grid Charge (charging is now controlled by enable switch and energy price)
+- Solar Dynamic Current now actively returns the charger to `min_current` when disabled or when the schedule window ends
+- Solar Dynamic Current now enforces the configured `max_current` immediately instead of waiting on the import debounce path
 
 ### Planned
 - Multiple charger support
