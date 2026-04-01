@@ -7,7 +7,8 @@ blueprint:
     - Import: reduces proportionally (not to zero) to avoid stop/start jitter
     - Only drops to minimum after 20s of sustained grid import (ignores brief clouds)
     - Raises current immediately on the next adjustment cycle when more solar is available
-    - Formula: Target Amps = (Exported Power - Buffer) / (Voltage × Phases)
+    - Turning off the enable switch or leaving the schedule window returns current to minimum
+    - Formula: Target Amps = (Effective Export + Current Charger Draw - Buffer) / (Voltage × Phases)
     - Accounts for home battery discharge (won't drain battery to charge car)
     - Keeps current between configurable min/max limits
   domain: automation
@@ -120,6 +121,8 @@ variables:
   cfg_power_buffer: !input power_buffer
   cfg_min_current: !input min_current
   cfg_max_current: !input max_current
+  cfg_schedule_start: !input schedule_start
+  cfg_schedule_end: !input schedule_end
   power_sensor_entity: !input power_sensor
   max_current_entity_id: !input max_current_entity
   enable_switch_entity: !input enable_switch
@@ -129,6 +132,15 @@ trigger:
   - platform: time_pattern
     seconds: "/20"
     id: "periodic"
+  - platform: state
+    entity_id: !input enable_switch
+    id: "enable_switch_changed"
+  - platform: time
+    at: !input schedule_start
+    id: "schedule_started"
+  - platform: time
+    at: !input schedule_end
+    id: "schedule_ended"
   - platform: numeric_state
     entity_id: !input power_sensor
     above: 0
@@ -136,78 +148,114 @@ trigger:
       seconds: 20
     id: "sustained_import"
 
-condition:
-  - condition: template
-    value_template: "{{ states(enable_switch_entity) == 'on' }}"
-  - condition: time
-    after: !input schedule_start
-    before: !input schedule_end
-  - condition: template
-    value_template: >
-      {{ states(power_sensor_entity) not in ['unavailable', 'unknown', 'none']
-         and states(max_current_entity_id) not in ['unavailable', 'unknown', 'none']
-         and states(battery_power_entity) not in ['unavailable', 'unknown', 'none'] }}
-
 action:
   - variables:
       raw_power_export: "{{ states(power_sensor_entity) | float(0) }}"
       battery_power: "{{ states(battery_power_entity) | float(0) }}"
       current_max_amps: "{{ states(max_current_entity_id) | float(0) }}"
-  - variables:
-      watts_per_amp: "{{ (cfg_voltage | float(0)) * (cfg_phases | float(0)) }}"
-      effective_power_export: >
-        {% set bat = battery_power | float(0) %}
-        {% set battery_adj = [bat, 0] | max %}
-        {{ raw_power_export | float(0) + battery_adj }}
-      target_amps: >
-        {% set power_export = effective_power_export | float(0) %}
-        {% set cur = current_max_amps | float(0) %}
-        {% set wpc = watts_per_amp | float(1) %}
-        {% if power_export < 0 %}
-          {% set charger_draw = cur * wpc %}
-          {% set available_watts = (power_export | abs) + charger_draw - cfg_power_buffer %}
-          {% set calculated_amps = (available_watts / wpc) | int %}
-          {% if cur | int <= cfg_min_current | int %}
-            {# Cold start: leave some headroom, but ramp faster than the original 50% start #}
-            {% set start_amps = (((power_export | abs) - cfg_power_buffer) / wpc * 0.75) | int %}
-            {{ [[start_amps, cfg_max_current] | min, [6, cfg_min_current] | max] | max | int }}
-          {% else %}
-            {{ [[calculated_amps, cfg_max_current] | min, cfg_min_current] | max | int }}
-          {% endif %}
+      safe_min_current: "{{ [cfg_min_current | int, cfg_max_current | int] | min }}"
+      enable_is_on: "{{ is_state(enable_switch_entity, 'on') }}"
+      within_schedule: >
+        {% set start = today_at(cfg_schedule_start) %}
+        {% set end = today_at(cfg_schedule_end) %}
+        {% if start <= end %}
+          {{ start <= now() < end }}
         {% else %}
-          {# Importing: reduce proportionally rather than dropping to min #}
-          {% set import_watts = power_export + cfg_power_buffer %}
-          {% set reduce_amps = (import_watts / wpc) | round(0, 'ceil') | int + 1 %}
-          {% set gentle_target = cur | int - reduce_amps %}
-          {{ [[gentle_target, cfg_max_current] | min, cfg_min_current] | max | int }}
+          {{ now() >= start or now() < end }}
         {% endif %}
+      power_sensor_ready: "{{ states(power_sensor_entity) not in ['unavailable', 'unknown', 'none'] }}"
+      current_entity_ready: "{{ states(max_current_entity_id) not in ['unavailable', 'unknown', 'none'] }}"
+      battery_sensor_ready: "{{ states(battery_power_entity) not in ['unavailable', 'unknown', 'none'] }}"
   - choose:
-      # Case 1: LOWER current
-      # - If still exporting (power < 0): adjust proportionally on periodic check
-      # - If importing (power >= 0): only lower after 20s sustained import trigger
       - conditions:
           - condition: template
             value_template: >
-              {{ target_amps | int < current_max_amps | int
-                 and (raw_power_export | float(0) < 0 or trigger.id == 'sustained_import') }}
+              {{ (current_entity_ready | bool(false))
+                 and (current_max_amps | float(0)) > (safe_min_current | float(0))
+                 and ((not (enable_is_on | bool(false))) or (not (within_schedule | bool(false)))) }}
         sequence:
           - service: number.set_value
             target:
               entity_id: !input max_current_entity
             data:
-              value: "{{ target_amps }}"
+              value: "{{ safe_min_current }}"
+      - conditions:
+          - condition: template
+            value_template: >
+              {{ (enable_is_on | bool(false))
+                 and (within_schedule | bool(false))
+                 and (power_sensor_ready | bool(false))
+                 and (current_entity_ready | bool(false))
+                 and (battery_sensor_ready | bool(false)) }}
+        sequence:
+          - variables:
+              watts_per_amp: "{{ (cfg_voltage | float(0)) * (cfg_phases | float(0)) }}"
+              effective_power_export: >
+                {% set bat = battery_power | float(0) %}
+                {% set battery_adj = [bat, 0] | max %}
+                {{ raw_power_export | float(0) + battery_adj }}
+              target_amps: >
+                {% set power_export = effective_power_export | float(0) %}
+                {% set cur = current_max_amps | float(0) %}
+                {% set wpc = watts_per_amp | float(1) %}
+                {% if power_export < 0 %}
+                  {% set charger_draw = cur * wpc %}
+                  {% set available_watts = (power_export | abs) + charger_draw - cfg_power_buffer %}
+                  {% set calculated_amps = (available_watts / wpc) | int %}
+                  {% if cur | int <= safe_min_current | int %}
+                    {# Cold start: leave some headroom, but ramp faster than the original 50% start #}
+                    {% set start_amps = (((power_export | abs) - cfg_power_buffer) / wpc * 0.75) | int %}
+                    {{ [[start_amps, cfg_max_current] | min, [6, safe_min_current] | max] | max | int }}
+                  {% else %}
+                    {{ [[calculated_amps, cfg_max_current] | min, safe_min_current] | max | int }}
+                  {% endif %}
+                {% else %}
+                  {# Importing: reduce proportionally rather than dropping to min #}
+                  {% set import_watts = power_export + cfg_power_buffer %}
+                  {% set reduce_amps = (import_watts / wpc) | round(0, 'ceil') | int + 1 %}
+                  {% set gentle_target = cur | int - reduce_amps %}
+                  {{ [[gentle_target, cfg_max_current] | min, safe_min_current] | max | int }}
+                {% endif %}
+              should_lower_now: >
+                {% set target = target_amps | int %}
+                {% set current = current_max_amps | int %}
+                {% if target >= current %}
+                  false
+                {% elif current > (cfg_max_current | int) %}
+                  true
+                {% elif effective_power_export | float(0) < 0 %}
+                  true
+                {% elif battery_power | float(0) > 0 %}
+                  true
+                {% elif trigger.id in ['sustained_import', 'enable_switch_changed', 'schedule_started'] %}
+                  true
+                {% else %}
+                  false
+                {% endif %}
+          - choose:
+              # Case 1: LOWER current
+              # - If still exporting (power < 0): adjust proportionally right away
+              # - If importing (power >= 0): wait for sustained import, unless we are above the configured max
+              - conditions:
+                  - condition: template
+                    value_template: "{{ should_lower_now | bool(false) }}"
+                sequence:
+                  - service: number.set_value
+                    target:
+                      entity_id: !input max_current_entity
+                    data:
+                      value: "{{ target_amps }}"
 
-      # Case 2: RAISE current
-      # Raise immediately on the next adjustment cycle when more surplus is available
-      - conditions:
-          - condition: template
-            value_template: >
-              {{ target_amps | int > current_max_amps | int }}
-        sequence:
-          - service: number.set_value
-            target:
-              entity_id: !input max_current_entity
-            data:
-              value: "{{ target_amps }}"
+              # Case 2: RAISE current
+              # Raise immediately on the next adjustment cycle when more surplus is available
+              - conditions:
+                  - condition: template
+                    value_template: "{{ target_amps | int > current_max_amps | int }}"
+                sequence:
+                  - service: number.set_value
+                    target:
+                      entity_id: !input max_current_entity
+                    data:
+                      value: "{{ target_amps }}"
 
 mode: single

@@ -18,10 +18,11 @@ Adjusts charging current in real-time based on available solar export:
 - **Formula**: `Target Amps = (Grid Export + Current Charger Draw - Buffer) / (Voltage x Phases)`
 - **Responsive lowering**: Immediately reduces current when export drops (while still exporting)
 - **Cloud resilience**: Only drops to minimum after 20s of sustained grid import (ignores brief clouds)
-- **Stable raising**: Only increases current after sustained high export (prevents oscillation)
+- **Fast raising**: Increases current on the next adjustment cycle when more surplus is available
 - **Enable switch**: Toggle solar charging on/off via an `input_boolean` helper
+- **Clean stop behavior**: Turning the switch off or leaving the schedule window returns the charger to the configured minimum
 - **Integer amps**: Always outputs whole-number amp values
-- **Configurable limits**: Min/max current, voltage, buffer, raise delay, and schedule window
+- **Configurable limits**: Min/max current, voltage, phases, buffer, and schedule window
 
 ### Grid Charge
 Manages grid charging while keeping total grid import below a configurable limit, with optional energy price awareness:
@@ -152,8 +153,11 @@ Every 20 seconds (during schedule window, if enable switch is ON):
 4. Calculate target_amps = available / (voltage x phases)  (truncated to integer)
 5. Clamp between min_current and max_current
 6. IF target < current AND still exporting → Lower immediately
-   ELSE IF importing for 20+ seconds → Drop to minimum
+   ELSE IF importing for 20+ seconds → Apply the proportional reduction
    ELSE IF target > current → Raise on the next cycle
+
+When the enable switch turns OFF or the schedule window ends:
+1. Set charger current back to min_current
 ```
 
 ### Grid Charge Logic
