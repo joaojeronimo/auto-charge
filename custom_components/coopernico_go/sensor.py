@@ -13,7 +13,11 @@ from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.device_registry import DeviceEntryType
 from homeassistant.helpers.entity import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
-from homeassistant.helpers.event import async_track_state_change_event
+from homeassistant.helpers.event import (
+    async_track_state_change_event,
+    async_track_time_change,
+)
+from homeassistant.util import dt as dt_util
 
 from .const import (
     CONF_OMIE_ENTITY,
@@ -34,19 +38,33 @@ from .const import (
     TSE,
 )
 
+# Official BTN tri-horário daily cycle for Portugal Continental.
+_TRI_DAILY_SCHEDULE = {
+    "winter": (
+        (8 * 60, 9 * 60, "cheias"),
+        (9 * 60, 10 * 60 + 30, "ponta"),
+        (10 * 60 + 30, 18 * 60, "cheias"),
+        (18 * 60, 20 * 60 + 30, "ponta"),
+        (20 * 60 + 30, 22 * 60, "cheias"),
+    ),
+    "summer": (
+        (8 * 60, 10 * 60 + 30, "cheias"),
+        (10 * 60 + 30, 13 * 60, "ponta"),
+        (13 * 60, 19 * 60 + 30, "cheias"),
+        (19 * 60 + 30, 21 * 60, "ponta"),
+        (21 * 60, 22 * 60, "cheias"),
+    ),
+}
+
+
+def _now() -> datetime:
+    """Return Home Assistant local time."""
+    return dt_util.now()
+
 
 def _is_summer(dt: datetime) -> bool:
-    """Check if date is in summer (DST) period for Portugal."""
-    # Last Sunday of March
-    mar_last_day = dt.replace(month=3, day=31)
-    mar_last_sun = 31 - ((mar_last_day.weekday() + 1) % 7)
-    # Last Sunday of October
-    oct_last_day = dt.replace(month=10, day=31)
-    oct_last_sun = 31 - ((oct_last_day.weekday() + 1) % 7)
-
-    after_mar = dt.month > 3 or (dt.month == 3 and dt.day >= mar_last_sun)
-    before_oct = dt.month < 10 or (dt.month == 10 and dt.day < oct_last_sun)
-    return after_mar and before_oct
+    """Check if datetime is in Portugal legal summer time."""
+    return bool(dt.dst())
 
 
 def _semester(dt: datetime) -> str:
@@ -62,18 +80,16 @@ def _bi_periodo(dt: datetime) -> str:
 def _tri_periodo(dt: datetime) -> str:
     """Return current tri-horário period."""
     t = dt.hour * 60 + dt.minute
-    if _is_summer(dt):
-        if (630 <= t < 780) or (1170 <= t < 1260):
-            return "ponta"
-        if (480 <= t < 630) or (780 <= t < 1170) or (1260 <= t < 1320):
-            return "cheias"
-        return "vazio"
-    else:
-        if (540 <= t < 630) or (1080 <= t < 1230):
-            return "ponta"
-        if (480 <= t < 540) or (630 <= t < 1080) or (1230 <= t < 1320):
-            return "cheias"
-        return "vazio"
+    schedule_key = "summer" if _is_summer(dt) else "winter"
+    for start, end, period in _TRI_DAILY_SCHEDULE[schedule_key]:
+        if start <= t < end:
+            return period
+    return "vazio"
+
+
+def _requires_period_updates(tariff: str) -> bool:
+    """Return True if the displayed period changes with the clock."""
+    return tariff != TARIFF_SIMPLES
 
 
 def _energy_price(omie_mwh: float) -> float:
@@ -168,6 +184,7 @@ class CoopernicoBaseSensor(SensorEntity):
         self._entry = entry
         self._omie_entity = omie_entity
         self._attr_device_info = device_info
+        self._track_time_updates = False
 
     async def async_added_to_hass(self) -> None:
         """Track OMIE entity state changes."""
@@ -176,12 +193,27 @@ class CoopernicoBaseSensor(SensorEntity):
                 self.hass, [self._omie_entity], self._handle_omie_update
             )
         )
+        if self._track_time_updates:
+            self.async_on_remove(
+                async_track_time_change(
+                    self.hass,
+                    self._handle_time_update,
+                    minute=[0, 30],
+                    second=0,
+                )
+            )
         # Calculate initial value
         self._update_state()
 
     @callback
     def _handle_omie_update(self, event) -> None:
         """Handle OMIE sensor state change."""
+        self._update_state()
+        self.async_write_ha_state()
+
+    @callback
+    def _handle_time_update(self, now: datetime) -> None:
+        """Handle time-driven tariff changes."""
         self._update_state()
         self.async_write_ha_state()
 
@@ -209,9 +241,10 @@ class CoopernicoPeriodSensor(CoopernicoBaseSensor):
         super().__init__(entry, omie_entity, device_info)
         self._tariff = tariff
         self._attr_unique_id = f"{entry.entry_id}_period"
+        self._track_time_updates = _requires_period_updates(tariff)
 
     def _update_state(self) -> None:
-        dt = datetime.now()
+        dt = _now()
         period_func = _TARIFF_MAP[self._tariff][0]
         period = period_func(dt)
         self._attr_native_value = _PERIOD_LABELS.get(period, period)
@@ -253,9 +286,10 @@ class CoopernicoTarSensor(CoopernicoPriceSensor):
         super().__init__(entry, omie_entity, device_info)
         self._tariff = tariff
         self._attr_unique_id = f"{entry.entry_id}_tar"
+        self._track_time_updates = True
 
     def _update_state(self) -> None:
-        dt = datetime.now()
+        dt = _now()
         tar_func = _TARIFF_MAP[self._tariff][1]
         self._attr_native_value = round(tar_func(dt), 4)
 
@@ -270,13 +304,14 @@ class CoopernicoTotalSensor(CoopernicoPriceSensor):
         super().__init__(entry, omie_entity, device_info)
         self._tariff = tariff
         self._attr_unique_id = f"{entry.entry_id}_total"
+        self._track_time_updates = True
 
     def _update_state(self) -> None:
         omie = self._get_omie_price()
         if omie is None:
             self._attr_native_value = None
             return
-        dt = datetime.now()
+        dt = _now()
         energy = _energy_price(omie)
         tar_func = _TARIFF_MAP[self._tariff][1]
         tar = tar_func(dt)
@@ -293,13 +328,14 @@ class CoopernicoIva6Sensor(CoopernicoPriceSensor):
         super().__init__(entry, omie_entity, device_info)
         self._tariff = tariff
         self._attr_unique_id = f"{entry.entry_id}_iva6"
+        self._track_time_updates = True
 
     def _update_state(self) -> None:
         omie = self._get_omie_price()
         if omie is None:
             self._attr_native_value = None
             return
-        dt = datetime.now()
+        dt = _now()
         energy = _energy_price(omie)
         tar_func = _TARIFF_MAP[self._tariff][1]
         tar = tar_func(dt)
@@ -320,13 +356,14 @@ class CoopernicoIva23Sensor(CoopernicoPriceSensor):
         super().__init__(entry, omie_entity, device_info)
         self._tariff = tariff
         self._attr_unique_id = f"{entry.entry_id}_iva23"
+        self._track_time_updates = True
 
     def _update_state(self) -> None:
         omie = self._get_omie_price()
         if omie is None:
             self._attr_native_value = None
             return
-        dt = datetime.now()
+        dt = _now()
         energy = _energy_price(omie)
         tar_func = _TARIFF_MAP[self._tariff][1]
         tar = tar_func(dt)
