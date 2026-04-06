@@ -14,11 +14,11 @@
 1. **Open Blueprints**
    - Go to **Settings** > **Automations & Scenes** > **Blueprints**
 
-2. **Import Solar Dynamic Current Blueprint**
+2. **Import Solar Charge Dynamic Current Blueprint**
    - Click **"Import Blueprint"** (bottom right)
    - Paste the URL:
      ```
-     https://github.com/yourusername/auto-charge/blob/main/blueprints/automation/auto_charge_dynamic_current.yaml
+     https://github.com/yourusername/auto-charge/blob/main/blueprints/automation/solar_charge_dynamic_current.yaml
      ```
    - Click **"Preview"** then **"Import"**
 
@@ -33,7 +33,7 @@
 4. **Verify Installation**
    - Go to **Settings** > **Automations & Scenes**
    - Click **"Create Automation"** > **"Use a Blueprint"**
-   - You should see **"Auto-Charge Dynamic Current Adjustment"** and **"Grid Charge"**
+   - You should see **"Solar Charge Dynamic Current"** and **"Grid Charge"**
 
 ## Method 2: Manual Installation
 
@@ -41,7 +41,7 @@
 
 1. **Download Blueprints**
    - Download the following files from the repository:
-     - `blueprints/automation/auto_charge_dynamic_current.yaml`
+     - `blueprints/automation/solar_charge_dynamic_current.yaml`
      - `blueprints/automation/grid_charge.yaml`
 
 2. **Create Directory**
@@ -81,11 +81,12 @@ Before configuring the blueprints, create `input_boolean` helpers for each:
 5. Repeat and create another toggle named **"Grid Charge Enable"**
 
 These toggle switches let you turn each charging mode on and off independently. You can add them to your dashboard for easy access.
+When the solar charge switch is turned off, the blueprint sets the charger current to `0`.
 
-### Configure Solar Dynamic Current
+### Configure Solar Charge Dynamic Current
 
 1. **Settings** > **Automations & Scenes** > **"Create Automation"**
-2. Select **"Use a Blueprint"** > **"Auto-Charge Dynamic Current Adjustment"**
+2. Select **"Use a Blueprint"** > **"Solar Charge Dynamic Current"**
 3. Fill in:
    - **Power Sensor**: Your grid power sensor (e.g., `sensor.grid_power`) — must be negative when exporting
    - **Max Current Entity**: Your charger's current control (e.g., `number.charger_max_current`)
@@ -93,7 +94,7 @@ These toggle switches let you turn each charging mode on and off independently. 
    - **Voltage**: Your grid voltage (e.g., `230` or `240`)
    - **Phases**: Number of phases (`1` for single-phase, `3` for three-phase)
    - **Power Buffer**: Safety margin in Watts (e.g., `100`)
-   - **Min Current**: Minimum amps (e.g., `0` or `6` depending on your charger)
+   - **Min Current**: Minimum amps while solar charge is active (e.g., `0` or `6` depending on your charger)
    - **Max Current**: Maximum amps (e.g., `16` or `32`)
    - **Schedule Start/End**: Time window for solar charging (e.g., `09:00` to `22:00`)
 4. Click **"Save"** and give it a name

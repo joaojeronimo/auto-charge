@@ -13,16 +13,16 @@ Real-time energy price sensors for Coopernico GO 2.0 indexed tariff (Portugal):
 - **Summer/winter periods**: Automatic DST detection for tri-horário schedules
 - **Portuguese & English**: Full UI translations
 
-### Solar Dynamic Current (Daytime)
+### Solar Charge Dynamic Current (Daytime)
 Adjusts charging current in real-time based on available solar export:
 - **Formula**: `Target Amps = (Grid Export + Current Charger Draw - Buffer) / (Voltage x Phases)`
 - **Responsive lowering**: Immediately reduces current when export drops (while still exporting)
 - **Cloud resilience**: Only drops to minimum after 20s of sustained grid import (ignores brief clouds)
 - **Fast raising**: Increases current on the next adjustment cycle when more surplus is available
 - **Enable switch**: Toggle solar charging on/off via an `input_boolean` helper
-- **Clean stop behavior**: Turning the switch off or leaving the schedule window returns the charger to the configured minimum
+- **Clean stop behavior**: Turning the switch off or leaving the schedule window sets the charger current to `0`
 - **Integer amps**: Always outputs whole-number amp values
-- **Configurable limits**: Min/max current, voltage, phases, buffer, and schedule window
+- **Configurable limits**: Active min/max current, voltage, phases, buffer, and schedule window
 
 ### Grid Charge
 Manages grid charging while keeping total grid import below a configurable limit, with optional energy price awareness:
@@ -36,7 +36,7 @@ Manages grid charging while keeping total grid import below a configurable limit
 
 | Blueprint | File | Purpose |
 |-----------|------|---------|
-| Auto-Charge Dynamic Current | `auto_charge_dynamic_current.yaml` | Solar-based daytime charging |
+| Solar Charge Dynamic Current | `solar_charge_dynamic_current.yaml` | Solar-based daytime charging |
 | Grid Charge | `grid_charge.yaml` | Grid-import-limited charging with energy price control |
 
 ## Installation
@@ -78,7 +78,7 @@ After setup, you get these sensors (example for Tri-Horária):
 
 **Formula**: `Energy = ((OMIE + 0.009) × 1.16) + 0.001` | `Total = Energy + TAR + CS + CR + TSE + IEC`
 
-### Setting Up Solar Dynamic Current
+### Setting Up Solar Charge Dynamic Current
 
 1. **Create an `input_boolean` helper** first:
    - Go to **Settings** > **Devices & Services** > **Helpers**
@@ -88,7 +88,7 @@ After setup, you get these sensors (example for Tri-Horária):
 
 2. Go to **Settings** > **Automations & Scenes**
 3. Click **"+ Create Automation"** > **"Use a Blueprint"**
-4. Select **"Auto-Charge Dynamic Current Adjustment"**
+4. Select **"Solar Charge Dynamic Current"**
 5. Configure:
    - **Power Sensor**: Grid power sensor (negative when exporting)
    - **Max Current Entity**: Your charger's current control (number entity)
@@ -96,7 +96,7 @@ After setup, you get these sensors (example for Tri-Horária):
    - **Voltage**: Your grid voltage (default: 230V)
    - **Phases**: 1 for single-phase, 3 for three-phase (default: 1)
    - **Power Buffer**: Safety margin to avoid grid import (default: 100W)
-   - **Min Current**: Minimum charging current (default: 0A)
+   - **Min Current**: Minimum charging current while solar charge is active (default: 0A)
    - **Max Current**: Maximum charging current (default: 32A)
    - **Schedule Start/End**: Time window for solar charging (default: 09:00-22:00)
 6. Save the automation
@@ -129,7 +129,7 @@ After setup, you get these sensors (example for Tri-Horária):
 
 ## Requirements
 
-### For Solar Dynamic Current:
+### For Solar Charge Dynamic Current:
 - A **power sensor** that shows grid import/export (negative when exporting)
 - A **number entity** that controls max charging current
 - An **`input_boolean` helper** to enable/disable solar charging
@@ -144,7 +144,7 @@ After setup, you get these sensors (example for Tri-Horária):
 
 ## How It Works
 
-### Solar Dynamic Current Logic
+### Solar Charge Dynamic Current Logic
 ```
 Every 20 seconds (during schedule window, if enable switch is ON):
 1. Read grid export and current charger amps
@@ -157,7 +157,7 @@ Every 20 seconds (during schedule window, if enable switch is ON):
    ELSE IF target > current → Raise on the next cycle
 
 When the enable switch turns OFF or the schedule window ends:
-1. Set charger current back to min_current
+1. Set charger current to 0
 ```
 
 ### Grid Charge Logic

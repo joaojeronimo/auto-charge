@@ -2,9 +2,9 @@
 
 This document provides example configurations for common setups.
 
-## Solar Dynamic Current Examples
+## Solar Charge Dynamic Current Examples
 
-These examples use the **Auto-Charge Dynamic Current Adjustment** blueprint for daytime solar charging. All require an `input_boolean` helper for the enable switch.
+These examples use the **Solar Charge Dynamic Current** blueprint for daytime solar charging. All require an `input_boolean` helper for the enable switch.
 
 ### Example 1: Single-Phase Solar Setup (230V, 16A Max)
 
@@ -252,7 +252,7 @@ When balanced: sensor should show near 0
 
 ## Formula Reference
 
-### Solar Dynamic Current
+### Solar Charge Dynamic Current
 ```
 charger_draw = current_amps x voltage x phases
 available_watts = grid_export + charger_draw - power_buffer

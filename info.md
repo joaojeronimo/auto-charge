@@ -11,7 +11,7 @@ Intelligent EV charging automation blueprints and real-time Coopernico GO 2.0 en
 - Portuguese & English translations
 
 **Automation Blueprints**:
-1. **Auto-Charge Dynamic Current** — Adjusts charging current in real-time based on available solar export
+1. **Solar Charge Dynamic Current** — Adjusts charging current in real-time based on available solar export
 2. **Grid Charge** — Manages grid charging within a configurable import limit and energy price cap (€/kWh)
 
 ### Quick Start
