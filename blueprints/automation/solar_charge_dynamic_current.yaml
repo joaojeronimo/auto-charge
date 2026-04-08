@@ -127,12 +127,6 @@ trigger:
     seconds: !input adjustment_interval
     id: "periodic"
   - platform: state
-    entity_id: !input power_sensor
-    id: "power_changed"
-  - platform: state
-    entity_id: !input max_current_entity
-    id: "current_limit_changed"
-  - platform: state
     entity_id: !input enable_switch
     id: "enable_switch_changed"
   - platform: time
