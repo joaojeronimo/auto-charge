@@ -1,22 +1,19 @@
 blueprint:
   name: Solar Charge Dynamic Current
   description: |
-    Dynamically adjusts EV charging current based on available solar export power.
-    - Cold start: begins at ~75% of available export to reduce sluggish starts
-    - Lowers current immediately when export drops while still exporting
-    - Import: reduces proportionally (not to zero) to avoid stop/start jitter
-    - Only drops to minimum after 20s of sustained grid import (ignores brief clouds)
-    - Raises current immediately on the next adjustment cycle when more solar is available
+    Dynamically adjusts EV charging current from net grid power.
+    - Power sensor must be negative when exporting and positive when importing
+    - Targets a small export margin equal to the configured power buffer
+    - Raises current when export exceeds the buffer
+    - Lowers current when importing or when export drops below the buffer
     - Turning off solar charge or leaving the schedule window sets charger current to 0A
-    - Formula: Target Amps = (Effective Export + Current Charger Draw - Buffer) / (Voltage × Phases)
-    - Accounts for home battery discharge (won't drain battery to charge car)
-    - Keeps active solar charging between configurable min/max limits
+    - If the computed target is below min_current, charging is stopped instead of forcing a too-low active current
   domain: automation
   source_url: https://github.com/yourusername/auto-charge
   input:
     power_sensor:
       name: Power Sensor
-      description: Grid power sensor (should be negative when exporting to grid)
+      description: Grid power sensor (negative when exporting to grid, positive when importing)
       selector:
         entity:
           domain: sensor
@@ -52,7 +49,7 @@ blueprint:
 
     power_buffer:
       name: Power Buffer
-      description: Safety buffer to stay below export level (prevents grid import)
+      description: Safety buffer in Watts. The automation aims to keep this much export headroom.
       default: 100
       selector:
         number:
@@ -61,9 +58,18 @@ blueprint:
           step: 50
           unit_of_measurement: "W"
 
+    adjustment_interval:
+      name: Adjustment Interval
+      description: >-
+        How often to rerun the periodic adjustment, using Home Assistant time pattern
+        syntax for the seconds field. Examples: `/5`, `/10`, `/15`, `/20`, `/30`.
+      default: "/10"
+      selector:
+        text:
+
     min_current:
       name: Minimum Current
-      description: Minimum charging current while solar charge is active
+      description: Minimum charging current while solar charging is active. Set to 6A if your charger cannot charge below 6A.
       default: 0
       selector:
         number:
@@ -97,17 +103,6 @@ blueprint:
         entity:
           domain: input_boolean
 
-    battery_power_sensor:
-      name: Battery Power Sensor
-      description: >
-        Battery charge/discharge power sensor.
-        Positive = discharging (feeding house), Negative = charging (absorbing solar).
-        Used to prevent draining the home battery to charge the car.
-      selector:
-        entity:
-          domain: sensor
-          device_class: power
-
     schedule_end:
       name: Schedule End Time
       description: End time for charging window
@@ -126,12 +121,17 @@ variables:
   power_sensor_entity: !input power_sensor
   max_current_entity_id: !input max_current_entity
   enable_switch_entity: !input enable_switch
-  battery_power_entity: !input battery_power_sensor
 
 trigger:
   - platform: time_pattern
-    seconds: "/20"
+    seconds: !input adjustment_interval
     id: "periodic"
+  - platform: state
+    entity_id: !input power_sensor
+    id: "power_changed"
+  - platform: state
+    entity_id: !input max_current_entity
+    id: "current_limit_changed"
   - platform: state
     entity_id: !input enable_switch
     id: "enable_switch_changed"
@@ -141,36 +141,29 @@ trigger:
   - platform: time
     at: !input schedule_end
     id: "schedule_ended"
-  - platform: numeric_state
-    entity_id: !input power_sensor
-    above: 0
-    for:
-      seconds: 20
-    id: "sustained_import"
 
 action:
   - variables:
       disabled_current: 0
       raw_grid_power: "{{ states(power_sensor_entity) | float(0) }}"
-      battery_power: "{{ states(battery_power_entity) | float(0) }}"
       current_limit_amps: "{{ states(max_current_entity_id) | float(0) }}"
-      safe_min_current: "{{ [cfg_min_current | int, cfg_max_current | int] | min }}"
+      watts_per_amp: "{{ ((cfg_voltage | float(230)) * (cfg_phases | float(1))) | float(1) }}"
+      safe_min_current: "{{ [cfg_min_current | int(0), cfg_max_current | int(0)] | min }}"
       solar_charge_enabled: "{{ is_state(enable_switch_entity, 'on') }}"
       schedule_active: >-
-        {% set start = today_at(cfg_schedule_start) %}{% set end = today_at(cfg_schedule_end) %}{{ start <= now() < end if start <= end else now() >= start or now() < end }}
+        {% set start = today_at(cfg_schedule_start) %}
+        {% set end = today_at(cfg_schedule_end) %}
+        {{ start <= now() < end if start <= end else now() >= start or now() < end }}
       solar_charge_active: "{{ (solar_charge_enabled | bool(false)) and (schedule_active | bool(false)) }}"
       power_sensor_ready: "{{ states(power_sensor_entity) not in ['unavailable', 'unknown', 'none'] }}"
       current_entity_ready: "{{ states(max_current_entity_id) not in ['unavailable', 'unknown', 'none'] }}"
-      battery_sensor_ready: "{{ states(battery_power_entity) not in ['unavailable', 'unknown', 'none'] }}"
-      all_sensors_ready: "{{ (power_sensor_ready | bool(false)) and (current_entity_ready | bool(false)) and (battery_sensor_ready | bool(false)) }}"
   - choose:
-      # Solar charge is disabled or outside the schedule window: stop charging.
       - conditions:
           - condition: template
             value_template: >
               {{ (current_entity_ready | bool(false))
-                 and (current_limit_amps | float(0)) > (disabled_current | float(0))
-                 and not (solar_charge_active | bool(false)) }}
+                 and not (solar_charge_active | bool(false))
+                 and (current_limit_amps | float(0)) != (disabled_current | float(0)) }}
         sequence:
           - service: number.set_value
             target:
@@ -178,63 +171,44 @@ action:
             data:
               value: "{{ disabled_current }}"
 
-      # Solar charge is active and all required sensors are available: adjust current.
       - conditions:
           - condition: template
             value_template: >
               {{ (solar_charge_active | bool(false))
-                 and (all_sensors_ready | bool(false)) }}
+                 and (power_sensor_ready | bool(false))
+                 and (current_entity_ready | bool(false)) }}
         sequence:
           - variables:
-              watts_per_amp: "{{ (cfg_voltage | float(0)) * (cfg_phases | float(0)) }}"
-              effective_grid_power: >
-                {% set battery_discharge = [battery_power | float(0), 0] | max %}
-                {{ raw_grid_power | float(0) + battery_discharge }}
-              target_amps: >
-                {% set grid_power = effective_grid_power | float(0) %}
-                {% set current = current_limit_amps | float(0) %}
-                {% set watts_per_amp = watts_per_amp | float(1) %}
-                {% if grid_power < 0 %}
-                  {% set charger_draw = current * watts_per_amp %}
-                  {% set available_watts = (grid_power | abs) + charger_draw - cfg_power_buffer %}
-                  {% set calculated_amps = (available_watts / watts_per_amp) | int %}
-                  {% if current | int <= safe_min_current | int %}
-                    {# Cold start: leave some headroom, but ramp faster than the original 50% start #}
-                    {% set start_amps = (((grid_power | abs) - cfg_power_buffer) / watts_per_amp * 0.75) | int %}
-                    {{ [[start_amps, cfg_max_current] | min, [6, safe_min_current] | max] | max | int }}
-                  {% else %}
-                    {{ [[calculated_amps, cfg_max_current] | min, safe_min_current] | max | int }}
-                  {% endif %}
+              raw_target_amps: >
+                {% set grid_power = raw_grid_power | float(0) %}
+                {% set current_amps = current_limit_amps | float(0) %}
+                {% set buffer_watts = cfg_power_buffer | float(0) %}
+                {% set per_amp = watts_per_amp | float(1) %}
+                {% set delta_watts = (-buffer_watts) - grid_power %}
+                {% if delta_watts >= 0 %}
+                  {% set delta_amps = (delta_watts / per_amp) | int %}
                 {% else %}
-                  {# Importing: reduce proportionally rather than dropping to min #}
-                  {% set import_watts = grid_power + cfg_power_buffer %}
-                  {% set reduce_amps = (import_watts / watts_per_amp) | round(0, 'ceil') | int + 1 %}
-                  {% set gentle_target = current | int - reduce_amps %}
-                  {{ [[gentle_target, cfg_max_current] | min, safe_min_current] | max | int }}
+                  {% set delta_amps = -(((delta_watts | abs) / per_amp) | round(0, 'ceil') | int) %}
                 {% endif %}
-              should_lower_now: >
-                {% set target = target_amps | int %}
-                {% set current = current_limit_amps | int %}
-                {% if target >= current %}
-                  false
-                {% elif current > (cfg_max_current | int) %}
-                  true
-                {% elif effective_grid_power | float(0) < 0 %}
-                  true
-                {% elif battery_power | float(0) > 0 %}
-                  true
-                {% elif trigger.id in ['sustained_import', 'enable_switch_changed', 'schedule_started'] %}
-                  true
+                {{ (current_amps + delta_amps) | int }}
+              target_amps: >
+                {% set proposed = raw_target_amps | int %}
+                {% set min_current = safe_min_current | int(0) %}
+                {% set max_current = cfg_max_current | int(0) %}
+                {% set clamped = [[proposed, max_current] | min, 0] | max %}
+                {% if clamped == 0 %}
+                  0
+                {% elif min_current <= 0 %}
+                  {{ clamped }}
+                {% elif clamped < min_current %}
+                  0
                 {% else %}
-                  false
+                  {{ clamped }}
                 {% endif %}
           - choose:
-              # Case 1: LOWER current
-              # - If still exporting (power < 0): adjust proportionally right away
-              # - If importing (power >= 0): wait for sustained import, unless we are above the configured max
               - conditions:
                   - condition: template
-                    value_template: "{{ should_lower_now | bool(false) }}"
+                    value_template: "{{ target_amps | int != current_limit_amps | int }}"
                 sequence:
                   - service: number.set_value
                     target:
@@ -242,16 +216,5 @@ action:
                     data:
                       value: "{{ target_amps }}"
 
-              # Case 2: RAISE current
-              # Raise immediately on the next adjustment cycle when more surplus is available
-              - conditions:
-                  - condition: template
-                    value_template: "{{ target_amps | int > current_limit_amps | int }}"
-                sequence:
-                  - service: number.set_value
-                    target:
-                      entity_id: !input max_current_entity
-                    data:
-                      value: "{{ target_amps }}"
-
-mode: single
+mode: restart
+max_exceeded: silent
