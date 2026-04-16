@@ -135,6 +135,8 @@ When the solar charge switch is turned off, the blueprint sets the charger curre
 3. Fill in:
    - **Toggle Helper**: Your battery stop/normal `input_boolean` (e.g., `input_boolean.battery_discharge_hold`)
    - **Discharge Power Entity**: Your inverter's battery discharge power `number` entity (e.g., `number.battery_discharge_power`)
+   - **Electricity Price Sensor**: Your current electricity price sensor (e.g., `sensor.coopernico_go_total`)
+   - **Price Threshold**: If price is at or above this value, discharge is enabled automatically (e.g., `0.10`)
    - **Stopped Discharge Power**: Usually `0`
    - **Normal Discharge Power**: Your usual discharge limit in Watts (e.g., `5000`)
 4. Click **"Save"** and give it a name

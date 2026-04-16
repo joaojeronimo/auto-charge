@@ -184,11 +184,13 @@ These examples use the **Battery Discharge Power Toggle** blueprint for battery 
 
 ### Example 8: Stop Battery Discharge with a Dashboard Toggle
 
-**Scenario:** Your inverter exposes a `number` entity for maximum battery discharge power in Watts. You want a simple toggle to stop discharge temporarily and then restore your normal limit.
+**Scenario:** Your inverter exposes a `number` entity for maximum battery discharge power in Watts. You want a simple toggle to stop discharge temporarily, but still allow discharge automatically when the electricity price is high enough.
 
 ```yaml
 Toggle Helper: input_boolean.battery_discharge_hold
 Discharge Power Entity: number.battery_discharge_power
+Electricity Price Sensor: sensor.coopernico_go_total
+Price Threshold: 0.10
 Stopped Discharge Power: 0
 Normal Discharge Power: 5000
 ```
@@ -196,6 +198,7 @@ Normal Discharge Power: 5000
 **Behavior:**
 - Toggle **ON** → writes `0W` to the discharge power entity
 - Toggle **OFF** → writes `5000W` back to the discharge power entity
+- If electricity price rises to `0.10 €/kWh` or higher, it writes `5000W` even while the toggle remains ON
 
 ---
 

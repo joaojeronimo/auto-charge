@@ -4,6 +4,7 @@ blueprint:
     Toggles a battery discharge power limit between a stopped value and a normal value.
     - Turn the helper ON to stop or heavily limit battery discharge
     - Turn the helper OFF to restore your normal discharge power limit
+    - If the current electricity price is at or above the configured threshold, battery discharge is restored automatically
     - Also reapplies the configured target when Home Assistant starts
     - Designed for inverters that only expose a watt-based number entity
   domain: automation
@@ -22,6 +23,24 @@ blueprint:
       selector:
         entity:
           domain: number
+
+    electricity_price_sensor:
+      name: Electricity Price Sensor
+      description: Sensor that shows the current electricity price (for example in €/kWh)
+      selector:
+        entity:
+          domain: sensor
+
+    price_threshold:
+      name: Price Threshold
+      description: If current price is at or above this value, battery discharge is enabled automatically
+      default: 0.10
+      selector:
+        number:
+          min: 0.0
+          max: 2.0
+          step: 0.001
+          unit_of_measurement: "€/kWh"
 
     stopped_discharge_power:
       name: Stopped Discharge Power
@@ -48,6 +67,8 @@ blueprint:
 variables:
   toggle_helper_entity: !input toggle_helper
   discharge_power_entity_id: !input discharge_power_entity
+  electricity_price_entity: !input electricity_price_sensor
+  cfg_price_threshold: !input price_threshold
   cfg_stopped_discharge_power: !input stopped_discharge_power
   cfg_normal_discharge_power: !input normal_discharge_power
 
@@ -55,6 +76,10 @@ trigger:
   - id: "toggle_changed"
     platform: state
     entity_id: !input toggle_helper
+
+  - id: "price_changed"
+    platform: state
+    entity_id: !input electricity_price_sensor
 
   - id: "homeassistant_started"
     platform: homeassistant
@@ -64,10 +89,17 @@ action:
   - variables:
       toggle_state: "{{ states(toggle_helper_entity) }}"
       current_power: "{{ states(discharge_power_entity_id) | float(0) }}"
+      current_price: "{{ states(electricity_price_entity) | float(0) }}"
       power_entity_ready: "{{ states(discharge_power_entity_id) not in ['unavailable', 'unknown', 'none'] }}"
+      price_entity_ready: "{{ states(electricity_price_entity) not in ['unavailable', 'unknown', 'none'] }}"
       toggle_ready: "{{ toggle_state in ['on', 'off'] }}"
+      price_threshold_crossed: >
+        {{ (price_entity_ready | bool(false))
+           and (current_price | float(0) >= cfg_price_threshold | float(0)) }}
       target_power: >
-        {% if toggle_state == 'on' %}
+        {% if price_threshold_crossed | bool(false) %}
+          {{ cfg_normal_discharge_power | float(0) }}
+        {% elif toggle_state == 'on' %}
           {{ cfg_stopped_discharge_power | float(0) }}
         {% else %}
           {{ cfg_normal_discharge_power | float(0) }}

@@ -63,6 +63,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Battery Discharge Power Toggle blueprint
   - Uses an `input_boolean` helper as a dashboard-friendly stop/normal toggle
   - Writes directly to a watt-based battery discharge `number` entity
+  - Can automatically re-enable battery discharge when electricity price reaches a configured threshold
   - Reapplies the selected state when Home Assistant starts
 
 ### Changed

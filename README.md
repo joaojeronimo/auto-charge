@@ -37,6 +37,7 @@ Controls a battery discharge power limit from a dashboard-friendly toggle:
 - **Toggle helper**: Uses an `input_boolean` as a simple stop/normal switch
 - **Watt-based control**: Writes directly to a battery discharge `number` entity in Watts
 - **Simple restore**: Toggle ON sets a stop value such as `0W`; toggle OFF restores your configured normal value
+- **Price override**: If the current electricity price is at or above your threshold, battery discharge is restored automatically
 - **Startup sync**: Reapplies the selected mode when Home Assistant starts
 
 ## Blueprints
@@ -149,6 +150,8 @@ After setup, you get these sensors (example for Tri-Horária):
 5. Configure:
    - **Toggle Helper**: The `input_boolean` you created above
    - **Discharge Power Entity**: Your battery discharge power `number` entity in Watts
+   - **Electricity Price Sensor**: Sensor showing the current electricity price in €/kWh
+   - **Price Threshold**: If price is at or above this value, discharge is enabled automatically
    - **Stopped Discharge Power**: Usually `0`
    - **Normal Discharge Power**: Your usual discharge limit, such as `5000`
 6. Save the automation
@@ -170,6 +173,7 @@ After setup, you get these sensors (example for Tri-Horária):
 
 ### For Battery Discharge Power Toggle:
 - A **battery discharge power `number` entity** in Watts
+- An **electricity price sensor** showing the current price in €/kWh
 - An **`input_boolean` helper** to act as the stop/normal toggle
 
 ## How It Works
