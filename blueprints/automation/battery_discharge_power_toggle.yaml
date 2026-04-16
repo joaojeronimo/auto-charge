@@ -1,0 +1,90 @@
+blueprint:
+  name: Battery Discharge Power Toggle
+  description: |
+    Toggles a battery discharge power limit between a stopped value and a normal value.
+    - Turn the helper ON to stop or heavily limit battery discharge
+    - Turn the helper OFF to restore your normal discharge power limit
+    - Also reapplies the configured target when Home Assistant starts
+    - Designed for inverters that only expose a watt-based number entity
+  domain: automation
+  source_url: https://github.com/yourusername/auto-charge
+  input:
+    toggle_helper:
+      name: Toggle Helper
+      description: Input boolean used as the dashboard toggle
+      selector:
+        entity:
+          domain: input_boolean
+
+    discharge_power_entity:
+      name: Discharge Power Entity
+      description: Number entity that controls the battery discharge power limit in Watts
+      selector:
+        entity:
+          domain: number
+
+    stopped_discharge_power:
+      name: Stopped Discharge Power
+      description: Value to write when the toggle is ON (typically 0W)
+      default: 0
+      selector:
+        number:
+          min: 0
+          max: 20000
+          step: 50
+          unit_of_measurement: "W"
+
+    normal_discharge_power:
+      name: Normal Discharge Power
+      description: Value to write when the toggle is OFF (your usual discharge power limit in Watts)
+      default: 5000
+      selector:
+        number:
+          min: 0
+          max: 20000
+          step: 50
+          unit_of_measurement: "W"
+
+variables:
+  toggle_helper_entity: !input toggle_helper
+  discharge_power_entity_id: !input discharge_power_entity
+  cfg_stopped_discharge_power: !input stopped_discharge_power
+  cfg_normal_discharge_power: !input normal_discharge_power
+
+trigger:
+  - id: "toggle_changed"
+    platform: state
+    entity_id: !input toggle_helper
+
+  - id: "homeassistant_started"
+    platform: homeassistant
+    event: start
+
+action:
+  - variables:
+      toggle_state: "{{ states(toggle_helper_entity) }}"
+      current_power: "{{ states(discharge_power_entity_id) | float(0) }}"
+      power_entity_ready: "{{ states(discharge_power_entity_id) not in ['unavailable', 'unknown', 'none'] }}"
+      toggle_ready: "{{ toggle_state in ['on', 'off'] }}"
+      target_power: >
+        {% if toggle_state == 'on' %}
+          {{ cfg_stopped_discharge_power | float(0) }}
+        {% else %}
+          {{ cfg_normal_discharge_power | float(0) }}
+        {% endif %}
+  - choose:
+      - conditions:
+          - condition: template
+            value_template: >
+              {{ (power_entity_ready | bool(false))
+                 and (toggle_ready | bool(false))
+                 and (target_power | float(0)) != (current_power | float(0)) }}
+        sequence:
+          - service: number.set_value
+            target:
+              entity_id: !input discharge_power_entity
+            data:
+              value: "{{ target_power }}"
+
+mode: restart
+max_exceeded: silent

@@ -5,7 +5,7 @@
 - Home Assistant installed and running
 - An EV charger integration with a **number entity** for current control
 - A **power sensor** showing grid import/export
-- An **`input_boolean` helper** for each blueprint (created in steps below)
+- An **`input_boolean` helper** for each blueprint or toggle automation (created in steps below)
 
 ## Method 1: Blueprint Import (Recommended)
 
@@ -30,10 +30,18 @@
      ```
    - Click **"Preview"** then **"Import"**
 
-4. **Verify Installation**
+4. **Import Battery Discharge Power Toggle Blueprint**
+   - Click **"Import Blueprint"** again
+   - Paste the URL:
+     ```
+     https://github.com/yourusername/auto-charge/blob/main/blueprints/automation/battery_discharge_power_toggle.yaml
+     ```
+   - Click **"Preview"** then **"Import"**
+
+5. **Verify Installation**
    - Go to **Settings** > **Automations & Scenes**
    - Click **"Create Automation"** > **"Use a Blueprint"**
-   - You should see **"Solar Charge Dynamic Current"** and **"Grid Charge"**
+   - You should see **"Solar Charge Dynamic Current"**, **"Grid Charge"**, and **"Battery Discharge Power Toggle"**
 
 ## Method 2: Manual Installation
 
@@ -43,6 +51,7 @@
    - Download the following files from the repository:
      - `blueprints/automation/solar_charge_dynamic_current.yaml`
      - `blueprints/automation/grid_charge.yaml`
+     - `blueprints/automation/battery_discharge_power_toggle.yaml`
 
 2. **Create Directory**
    - Navigate to your Home Assistant config directory
@@ -55,7 +64,7 @@
      ```
 
 3. **Copy Files**
-   - Copy both blueprint YAML files to:
+   - Copy the blueprint YAML files to:
      ```
      config/blueprints/automation/auto-charge/
      ```
@@ -72,13 +81,14 @@
 
 ### Create Enable Switches (Required for Both Blueprints)
 
-Before configuring the blueprints, create `input_boolean` helpers for each:
+Before configuring the blueprints, create `input_boolean` helpers for each mode you want:
 
 1. Go to **Settings** > **Devices & Services** > **Helpers**
 2. Click **"+ Create Helper"** > **"Toggle"**
 3. Name it **"Solar Charge Enable"**
 4. Save it
 5. Repeat and create another toggle named **"Grid Charge Enable"**
+6. If you want the battery toggle, create another helper such as **"Battery Discharge Hold"**
 
 These toggle switches let you turn each charging mode on and off independently. You can add them to your dashboard for easy access.
 When the solar charge switch is turned off, the blueprint sets the charger current to `0`.
@@ -116,6 +126,17 @@ When the solar charge switch is turned off, the blueprint sets the charger curre
    - **Min Current**: Minimum amps (e.g., `0`)
    - **Max Current**: Maximum amps (e.g., `32`)
    - **Raise Delay**: Minutes to wait before raising current (e.g., `3`)
+4. Click **"Save"** and give it a name
+
+### Configure Battery Discharge Power Toggle
+
+1. **Settings** > **Automations & Scenes** > **"Create Automation"**
+2. Select **"Use a Blueprint"** > **"Battery Discharge Power Toggle"**
+3. Fill in:
+   - **Toggle Helper**: Your battery stop/normal `input_boolean` (e.g., `input_boolean.battery_discharge_hold`)
+   - **Discharge Power Entity**: Your inverter's battery discharge power `number` entity (e.g., `number.battery_discharge_power`)
+   - **Stopped Discharge Power**: Usually `0`
+   - **Normal Discharge Power**: Your usual discharge limit in Watts (e.g., `5000`)
 4. Click **"Save"** and give it a name
 
 ## Troubleshooting
