@@ -32,12 +32,20 @@ Manages grid charging while keeping total grid import below a configurable limit
 - **Enable switch**: Toggle charging on/off via an `input_boolean` helper
 - **Same smart logic**: Lowers immediately, raises only after sustained headroom
 
+### Battery Discharge Power Toggle
+Controls a battery discharge power limit from a dashboard-friendly toggle:
+- **Toggle helper**: Uses an `input_boolean` as a simple stop/normal switch
+- **Watt-based control**: Writes directly to a battery discharge `number` entity in Watts
+- **Simple restore**: Toggle ON sets a stop value such as `0W`; toggle OFF restores your configured normal value
+- **Startup sync**: Reapplies the selected mode when Home Assistant starts
+
 ## Blueprints
 
 | Blueprint | File | Purpose |
 |-----------|------|---------|
 | Solar Charge Dynamic Current | `solar_charge_dynamic_current.yaml` | Solar-based daytime charging |
 | Grid Charge | `grid_charge.yaml` | Grid-import-limited charging with energy price control |
+| Battery Discharge Power Toggle | `battery_discharge_power_toggle.yaml` | Toggle battery discharge power between stopped and normal values |
 
 ## Installation
 
@@ -127,6 +135,24 @@ After setup, you get these sensors (example for Tri-Horária):
    - **Raise Delay**: Minutes to wait before raising current (default: 3 min)
 6. Save the automation
 
+### Setting Up Battery Discharge Power Toggle
+
+1. **Create an `input_boolean` helper** first:
+   - Go to **Settings** > **Devices & Services** > **Helpers**
+   - Click **"+ Create Helper"** > **"Toggle"**
+   - Name it something like "Battery Discharge Hold"
+   - This switch controls whether battery discharge is stopped
+
+2. Go to **Settings** > **Automations & Scenes**
+3. Click **"+ Create Automation"** > **"Use a Blueprint"**
+4. Select **"Battery Discharge Power Toggle"**
+5. Configure:
+   - **Toggle Helper**: The `input_boolean` you created above
+   - **Discharge Power Entity**: Your battery discharge power `number` entity in Watts
+   - **Stopped Discharge Power**: Usually `0`
+   - **Normal Discharge Power**: Your usual discharge limit, such as `5000`
+6. Save the automation
+
 ## Requirements
 
 ### For Solar Charge Dynamic Current:
@@ -141,6 +167,10 @@ After setup, you get these sensors (example for Tri-Horária):
 - A **number entity** that controls max charging current
 - An **`input_boolean` helper** to enable/disable grid charging
 - Charger must support dynamic current adjustment
+
+### For Battery Discharge Power Toggle:
+- A **battery discharge power `number` entity** in Watts
+- An **`input_boolean` helper** to act as the stop/normal toggle
 
 ## How It Works
 

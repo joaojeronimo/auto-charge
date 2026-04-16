@@ -178,6 +178,27 @@ Raise Delay: 5
 
 ---
 
+## Battery Discharge Power Toggle Examples
+
+These examples use the **Battery Discharge Power Toggle** blueprint for battery systems that only expose a watt-based discharge power limit.
+
+### Example 8: Stop Battery Discharge with a Dashboard Toggle
+
+**Scenario:** Your inverter exposes a `number` entity for maximum battery discharge power in Watts. You want a simple toggle to stop discharge temporarily and then restore your normal limit.
+
+```yaml
+Toggle Helper: input_boolean.battery_discharge_hold
+Discharge Power Entity: number.battery_discharge_power
+Stopped Discharge Power: 0
+Normal Discharge Power: 5000
+```
+
+**Behavior:**
+- Toggle **ON** → writes `0W` to the discharge power entity
+- Toggle **OFF** → writes `5000W` back to the discharge power entity
+
+---
+
 ## Sensor Requirements
 
 Your power sensor should:

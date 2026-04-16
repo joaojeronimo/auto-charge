@@ -59,6 +59,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- Battery Discharge Power Toggle blueprint
+  - Uses an `input_boolean` helper as a dashboard-friendly stop/normal toggle
+  - Writes directly to a watt-based battery discharge `number` entity
+  - Reapplies the selected state when Home Assistant starts
+
 ### Changed
 - Renamed the solar blueprint to **"Solar Charge Dynamic Current"** (`solar_charge_dynamic_current.yaml`)
 - Renamed "Nightly Charge Dynamic Current" blueprint to **"Grid Charge"** (`grid_charge.yaml`)
