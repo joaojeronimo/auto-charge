@@ -6,7 +6,7 @@ blueprint:
     - Targets a small export margin equal to the configured power buffer
     - Raises current when export exceeds the buffer
     - Lowers current when importing or when export drops below the buffer
-    - Turning off solar charge or leaving the schedule window sets charger current to 0A
+    - Leaving the schedule window sets charger current to 0A
     - If the computed target is below min_current, charging is stopped instead of forcing a too-low active current
   domain: automation
   source_url: https://github.com/yourusername/auto-charge
@@ -96,13 +96,6 @@ blueprint:
       selector:
         time:
 
-    enable_switch:
-      name: Solar Charge Enable Switch
-      description: Toggle switch to enable/disable solar charging. Turning this off sets charger current to 0A.
-      selector:
-        entity:
-          domain: input_boolean
-
     schedule_end:
       name: Schedule End Time
       description: End time for charging window
@@ -120,15 +113,11 @@ variables:
   cfg_schedule_end: !input schedule_end
   power_sensor_entity: !input power_sensor
   max_current_entity_id: !input max_current_entity
-  enable_switch_entity: !input enable_switch
 
 trigger:
   - platform: time_pattern
     seconds: !input adjustment_interval
     id: "periodic"
-  - platform: state
-    entity_id: !input enable_switch
-    id: "enable_switch_changed"
   - platform: time
     at: !input schedule_start
     id: "schedule_started"
@@ -143,12 +132,10 @@ action:
       current_limit_amps: "{{ states(max_current_entity_id) | float(0) }}"
       watts_per_amp: "{{ ((cfg_voltage | float(230)) * (cfg_phases | float(1))) | float(1) }}"
       safe_min_current: "{{ [cfg_min_current | int(0), cfg_max_current | int(0)] | min }}"
-      solar_charge_enabled: "{{ is_state(enable_switch_entity, 'on') }}"
       schedule_active: >-
         {% set start = today_at(cfg_schedule_start) %}
         {% set end = today_at(cfg_schedule_end) %}
         {{ start <= now() < end if start <= end else now() >= start or now() < end }}
-      solar_charge_active: "{{ (solar_charge_enabled | bool(false)) and (schedule_active | bool(false)) }}"
       power_sensor_ready: "{{ states(power_sensor_entity) not in ['unavailable', 'unknown', 'none'] }}"
       current_entity_ready: "{{ states(max_current_entity_id) not in ['unavailable', 'unknown', 'none'] }}"
   - choose:
@@ -156,7 +143,7 @@ action:
           - condition: template
             value_template: >
               {{ (current_entity_ready | bool(false))
-                 and not (solar_charge_active | bool(false))
+                 and not (schedule_active | bool(false))
                  and (current_limit_amps | float(0)) != (disabled_current | float(0)) }}
         sequence:
           - service: number.set_value
@@ -168,7 +155,7 @@ action:
       - conditions:
           - condition: template
             value_template: >
-              {{ (solar_charge_active | bool(false))
+              {{ (schedule_active | bool(false))
                  and (power_sensor_ready | bool(false))
                  and (current_entity_ready | bool(false)) }}
         sequence:
