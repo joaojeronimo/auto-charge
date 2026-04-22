@@ -131,7 +131,7 @@ action:
       raw_grid_power: "{{ states(power_sensor_entity) | float(0) }}"
       current_limit_amps: "{{ states(max_current_entity_id) | float(0) }}"
       watts_per_amp: "{{ ((cfg_voltage | float(230)) * (cfg_phases | float(1))) | float(1) }}"
-      safe_min_current: "{{ [cfg_min_current | int(0), cfg_max_current | int(0)] | min }}"
+      safe_min_current: "{{ [cfg_min_current | int(0), 0] | max }}"
       schedule_active: >-
         {% set start = today_at(cfg_schedule_start) %}
         {% set end = today_at(cfg_schedule_end) %}
@@ -179,9 +179,7 @@ action:
                 {% set clamped = [[proposed, max_current] | min, 0] | max %}
                 {% if clamped == 0 %}
                   0
-                {% elif min_current <= 0 %}
-                  {{ clamped }}
-                {% elif clamped < min_current %}
+                {% elif min_current > 0 and clamped < min_current %}
                   0
                 {% else %}
                   {{ clamped }}
@@ -189,7 +187,7 @@ action:
           - choose:
               - conditions:
                   - condition: template
-                    value_template: "{{ target_amps | int != current_limit_amps | int }}"
+                    value_template: "{{ (target_amps | float(0) - current_limit_amps | float(0)) | abs > 0.001 }}"
                 sequence:
                   - service: number.set_value
                     target:
