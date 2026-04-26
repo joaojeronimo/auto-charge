@@ -6,6 +6,7 @@ blueprint:
     - Raises current only after sustained headroom (configurable delay)
     - Formula: Target Amps = (Max Import - Actual Import - Buffer) / (Voltage × Phases)
     - Keeps current between configurable min/max limits
+    - Optionally forces Goodwe EMS mode while grid charge is active/inactive
   domain: automation
   source_url: https://github.com/yourusername/auto-charge
   input:
@@ -125,6 +126,28 @@ blueprint:
         entity:
           domain: input_boolean
 
+    ems_mode_entity:
+      name: Goodwe EMS Mode Entity (Optional)
+      description: Select entity for Goodwe EMS mode (set to standby when enabled, auto when disabled)
+      default: ""
+      selector:
+        entity:
+          domain: select
+
+    ems_mode_active_option:
+      name: EMS Mode When Grid Charge Is Active
+      description: Option to set when grid charge is enabled
+      default: "Battery standby"
+      selector:
+        text:
+
+    ems_mode_inactive_option:
+      name: EMS Mode When Grid Charge Is Inactive
+      description: Option to set when grid charge is disabled
+      default: "Auto"
+      selector:
+        text:
+
 variables:
   cfg_max_import_power: !input max_import_power
   cfg_voltage: !input voltage
@@ -138,64 +161,94 @@ variables:
   enable_switch_entity: !input enable_switch
   energy_price_entity: !input energy_price_sensor
   cfg_max_energy_price: !input max_energy_price
+  ems_mode_entity_id: !input ems_mode_entity
+  cfg_ems_mode_active_option: !input ems_mode_active_option
+  cfg_ems_mode_inactive_option: !input ems_mode_inactive_option
 
 trigger:
   - id: "adjust_current"
     platform: time_pattern
     seconds: "/20"
-
-condition:
-  - condition: template
-    value_template: "{{ states(enable_switch_entity) == 'on' }}"
-  - condition: template
-    value_template: >
-      {{ states(power_sensor_entity) not in ['unavailable', 'unknown', 'none']
-         and states(max_current_entity_id) not in ['unavailable', 'unknown', 'none'] }}
+  - id: "switch_toggled"
+    platform: state
+    entity_id: !input enable_switch
 
 action:
   - variables:
+      grid_charge_enabled: "{{ states(enable_switch_entity) == 'on' }}"
+      power_sensor_ready: "{{ states(power_sensor_entity) not in ['unavailable', 'unknown', 'none'] }}"
+      current_entity_ready: "{{ states(max_current_entity_id) not in ['unavailable', 'unknown', 'none'] }}"
+      ems_mode_entity_ready: >
+        {{ ems_mode_entity_id not in ['', 'none']
+           and states(ems_mode_entity_id) not in ['unavailable', 'unknown', 'none'] }}
+      desired_ems_mode_option: >
+        {% if grid_charge_enabled | bool(false) %}
+          {{ cfg_ems_mode_active_option }}
+        {% else %}
+          {{ cfg_ems_mode_inactive_option }}
+        {% endif %}
       price_ok: >
         {{ states(energy_price_entity) not in ['unavailable', 'unknown', 'none']
            and states(energy_price_entity) | float(0) <= cfg_max_energy_price | float(0) }}
       power_import: "{{ states(power_sensor_entity) | float(0) }}"
       current_max_amps: "{{ states(max_current_entity_id) | float(0) }}"
-  - variables:
-      target_amps: >
-        {% set price_ok = price_ok | bool(false) %}
-        {% if not price_ok %}
-          {{ cfg_min_current }}
-        {% else %}
-          {% set power_import = power_import | float(0) %}
-          {% set charger_draw = current_max_amps | float(0) * cfg_voltage * cfg_phases %}
-          {% set base_load = [power_import - charger_draw, 0] | max %}
-          {% set available_watts = cfg_max_import_power - base_load - cfg_power_buffer %}
-          {% set target = (available_watts / (cfg_voltage * cfg_phases)) | int %}
-          {{ [[target, cfg_max_current] | min, cfg_min_current] | max }}
-        {% endif %}
-
   - choose:
-      # LOWER immediately when over the import limit or price too high
-      - conditions:
-          - condition: template
-            value_template: "{{ target_amps | int < current_max_amps | int }}"
-        sequence:
-          - service: number.set_value
-            target:
-              entity_id: !input max_current_entity
-            data:
-              value: "{{ target_amps }}"
-
-      # RAISE only after sustained headroom (raise_delay minutes since last change) and price is OK
       - conditions:
           - condition: template
             value_template: >
-              {{ (price_ok | bool(false)) and target_amps | int > current_max_amps | int
-                 and (as_timestamp(now()) - as_timestamp(states[max_current_entity_id].last_changed)) > (cfg_raise_delay * 60) }}
+              {{ (ems_mode_entity_ready | bool(false))
+                 and (states(ems_mode_entity_id) != (desired_ems_mode_option | string)) }}
         sequence:
-          - service: number.set_value
+          - service: select.select_option
             target:
-              entity_id: !input max_current_entity
+              entity_id: !input ems_mode_entity
             data:
-              value: "{{ target_amps }}"
+              option: "{{ desired_ems_mode_option }}"
+
+  - choose:
+      - conditions:
+          - condition: template
+            value_template: >
+              {{ (grid_charge_enabled | bool(false))
+                 and (power_sensor_ready | bool(false))
+                 and (current_entity_ready | bool(false)) }}
+        sequence:
+          - variables:
+              target_amps: >
+                {% set price_ok = price_ok | bool(false) %}
+                {% if not price_ok %}
+                  {{ cfg_min_current }}
+                {% else %}
+                  {% set power_import = power_import | float(0) %}
+                  {% set charger_draw = current_max_amps | float(0) * cfg_voltage * cfg_phases %}
+                  {% set base_load = [power_import - charger_draw, 0] | max %}
+                  {% set available_watts = cfg_max_import_power - base_load - cfg_power_buffer %}
+                  {% set target = (available_watts / (cfg_voltage * cfg_phases)) | int %}
+                  {{ [[target, cfg_max_current] | min, cfg_min_current] | max }}
+                {% endif %}
+          - choose:
+              # LOWER immediately when over the import limit or price too high
+              - conditions:
+                  - condition: template
+                    value_template: "{{ target_amps | int < current_max_amps | int }}"
+                sequence:
+                  - service: number.set_value
+                    target:
+                      entity_id: !input max_current_entity
+                    data:
+                      value: "{{ target_amps }}"
+
+              # RAISE only after sustained headroom (raise_delay minutes since last change) and price is OK
+              - conditions:
+                  - condition: template
+                    value_template: >
+                      {{ (price_ok | bool(false)) and target_amps | int > current_max_amps | int
+                         and (as_timestamp(now()) - as_timestamp(states[max_current_entity_id].last_changed)) > (cfg_raise_delay * 60) }}
+                sequence:
+                  - service: number.set_value
+                    target:
+                      entity_id: !input max_current_entity
+                    data:
+                      value: "{{ target_amps }}"
 
 mode: single
