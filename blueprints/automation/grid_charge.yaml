@@ -217,7 +217,7 @@ action:
               target_amps: >
                 {% set price_ok = price_ok | bool(false) %}
                 {% if not price_ok %}
-                  {{ cfg_min_current }}
+                  0
                 {% else %}
                   {% set power_import = power_import | float(0) %}
                   {% set charger_draw = current_max_amps | float(0) * cfg_voltage * cfg_phases %}
