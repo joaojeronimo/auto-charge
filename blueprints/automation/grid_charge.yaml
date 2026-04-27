@@ -1,12 +1,10 @@
 blueprint:
   name: Grid Charge
   description: |
-    Dynamically adjusts EV charging current to keep total grid import below a configurable limit.
-    - Lowers current immediately when import exceeds limit
-    - Raises current only after sustained headroom (configurable delay)
-    - Formula: Target Amps = (Max Import - Actual Import - Buffer) / (Voltage × Phases)
-    - Keeps current between configurable min/max limits
-    - Optionally forces Goodwe EMS mode while grid charge is active/inactive
+    Enables EV grid charging only while the current energy price is at or below a configurable maximum.
+    - Starts charging by setting Goodwe EMS mode to Battery standby before raising charger maximum current
+    - Stops charging when the price rises above the maximum, the price sensor is unavailable, or the enable switch is turned off
+    - Stops by setting charger maximum current to 0, then setting Goodwe EMS mode back to Auto
   domain: automation
   source_url: https://github.com/yourusername/auto-charge
   input:
@@ -19,7 +17,7 @@ blueprint:
 
     max_energy_price:
       name: Maximum Energy Price
-      description: Maximum energy price at which charging is allowed (in €/kWh)
+      description: Maximum energy price at which charging is allowed (in €/kWh). Charging stops above this price.
       default: 0.10
       selector:
         number:
@@ -28,14 +26,6 @@ blueprint:
           step: 0.01
           unit_of_measurement: "€/kWh"
 
-    power_sensor:
-      name: Power Sensor
-      description: Grid power sensor (positive when importing from grid)
-      selector:
-        entity:
-          domain: sensor
-          device_class: power
-
     max_current_entity:
       name: Maximum Current Control
       description: Number entity that controls the charger's maximum current
@@ -43,63 +33,9 @@ blueprint:
         entity:
           domain: number
 
-    max_import_power:
-      name: Maximum Import Power
-      description: Maximum allowed grid import power (in Watts)
-      default: 3000
-      selector:
-        number:
-          min: 500
-          max: 15000
-          step: 100
-          unit_of_measurement: "W"
-
-    voltage:
-      name: Grid Voltage
-      description: Your grid voltage (typically 230V or 240V)
-      default: 230
-      selector:
-        number:
-          min: 100
-          max: 250
-          step: 1
-          unit_of_measurement: "V"
-
-    phases:
-      name: Number of Phases
-      description: Number of phases your charger uses (1 for single-phase, 3 for three-phase)
-      default: 1
-      selector:
-        number:
-          min: 1
-          max: 3
-          step: 1
-
-    power_buffer:
-      name: Power Buffer
-      description: Safety buffer to stay below import limit (prevents exceeding limit)
-      default: 400
-      selector:
-        number:
-          min: 100
-          max: 2000
-          step: 50
-          unit_of_measurement: "W"
-
-    min_current:
-      name: Minimum Current
-      description: Minimum charging current (usually 0 or 6A depending on charger)
-      default: 0
-      selector:
-        number:
-          min: 0
-          max: 4
-          step: 1
-          unit_of_measurement: "A"
-
     max_current:
       name: Maximum Current
-      description: Maximum charging current (typically 16A or 32A)
+      description: Charging current to set while grid charge is active
       default: 32
       selector:
         number:
@@ -107,17 +43,6 @@ blueprint:
           max: 32
           step: 1
           unit_of_measurement: "A"
-
-    raise_delay:
-      name: Raise Delay
-      description: Wait time before raising current (prevents reacting to temporary drops in import)
-      default: 3
-      selector:
-        number:
-          min: 1
-          max: 10
-          step: 1
-          unit_of_measurement: "min"
 
     enable_switch:
       name: Grid Charge Enable Switch
@@ -127,9 +52,8 @@ blueprint:
           domain: input_boolean
 
     ems_mode_entity:
-      name: Goodwe EMS Mode Entity (Optional)
-      description: Select entity for Goodwe EMS mode (set to standby when enabled, auto when disabled)
-      default: ""
+      name: Goodwe EMS Mode Entity
+      description: Select entity for Goodwe EMS mode
       selector:
         entity:
           domain: select
@@ -149,14 +73,7 @@ blueprint:
         text:
 
 variables:
-  cfg_max_import_power: !input max_import_power
-  cfg_voltage: !input voltage
-  cfg_phases: !input phases
-  cfg_power_buffer: !input power_buffer
-  cfg_min_current: !input min_current
   cfg_max_current: !input max_current
-  cfg_raise_delay: !input raise_delay
-  power_sensor_entity: !input power_sensor
   max_current_entity_id: !input max_current_entity
   enable_switch_entity: !input enable_switch
   energy_price_entity: !input energy_price_sensor
@@ -166,89 +83,88 @@ variables:
   cfg_ems_mode_inactive_option: !input ems_mode_inactive_option
 
 trigger:
-  - id: "adjust_current"
+  - id: "sync"
     platform: time_pattern
     seconds: "/20"
   - id: "switch_toggled"
     platform: state
     entity_id: !input enable_switch
+  - id: "price_changed"
+    platform: state
+    entity_id: !input energy_price_sensor
+  - id: "homeassistant_started"
+    platform: homeassistant
+    event: start
 
 action:
   - variables:
       grid_charge_enabled: "{{ states(enable_switch_entity) == 'on' }}"
-      power_sensor_ready: "{{ states(power_sensor_entity) not in ['unavailable', 'unknown', 'none'] }}"
       current_entity_ready: "{{ states(max_current_entity_id) not in ['unavailable', 'unknown', 'none'] }}"
       ems_mode_entity_ready: >
-        {{ ems_mode_entity_id not in ['', 'none']
-           and states(ems_mode_entity_id) not in ['unavailable', 'unknown', 'none'] }}
-      desired_ems_mode_option: >
-        {% if grid_charge_enabled | bool(false) %}
-          {{ cfg_ems_mode_active_option }}
-        {% else %}
-          {{ cfg_ems_mode_inactive_option }}
-        {% endif %}
-      price_ok: >
+        {{ states(ems_mode_entity_id) not in ['unavailable', 'unknown', 'none'] }}
+      charge_allowed: >
         {{ states(energy_price_entity) not in ['unavailable', 'unknown', 'none']
-           and states(energy_price_entity) | float(0) <= cfg_max_energy_price | float(0) }}
-      power_import: "{{ states(power_sensor_entity) | float(0) }}"
+           and states(energy_price_entity) | float(999999) <= cfg_max_energy_price | float(0)
+           and grid_charge_enabled | bool(false)
+           and current_entity_ready | bool(false)
+           and ems_mode_entity_ready | bool(false) }}
       current_max_amps: "{{ states(max_current_entity_id) | float(0) }}"
   - choose:
       - conditions:
           - condition: template
-            value_template: >
-              {{ (ems_mode_entity_ready | bool(false))
-                 and (states(ems_mode_entity_id) != (desired_ems_mode_option | string)) }}
+            value_template: "{{ charge_allowed | bool(false) }}"
         sequence:
-          - service: select.select_option
-            target:
-              entity_id: !input ems_mode_entity
-            data:
-              option: "{{ desired_ems_mode_option }}"
-
-  - choose:
-      - conditions:
-          - condition: template
-            value_template: >
-              {{ (grid_charge_enabled | bool(false))
-                 and (power_sensor_ready | bool(false))
-                 and (current_entity_ready | bool(false)) }}
-        sequence:
-          - variables:
-              target_amps: >
-                {% set price_ok = price_ok | bool(false) %}
-                {% if not price_ok %}
-                  0
-                {% else %}
-                  {% set power_import = power_import | float(0) %}
-                  {% set charger_draw = current_max_amps | float(0) * cfg_voltage * cfg_phases %}
-                  {% set base_load = [power_import - charger_draw, 0] | max %}
-                  {% set available_watts = cfg_max_import_power - base_load - cfg_power_buffer %}
-                  {% set target = (available_watts / (cfg_voltage * cfg_phases)) | int %}
-                  {{ [[target, cfg_max_current] | min, cfg_min_current] | max }}
-                {% endif %}
           - choose:
-              # LOWER immediately when over the import limit or price too high
-              - conditions:
-                  - condition: template
-                    value_template: "{{ target_amps | int < current_max_amps | int }}"
-                sequence:
-                  - service: number.set_value
-                    target:
-                      entity_id: !input max_current_entity
-                    data:
-                      value: "{{ target_amps }}"
-
-              # RAISE only after sustained headroom (raise_delay minutes since last change) and price is OK
               - conditions:
                   - condition: template
                     value_template: >
-                      {{ (price_ok | bool(false)) and target_amps | int > current_max_amps | int
-                         and (as_timestamp(now()) - as_timestamp(states[max_current_entity_id].last_changed)) > (cfg_raise_delay * 60) }}
+                      {{ (ems_mode_entity_ready | bool(false))
+                         and (states(ems_mode_entity_id) != (cfg_ems_mode_active_option | string)) }}
+                sequence:
+                  - service: select.select_option
+                    target:
+                      entity_id: !input ems_mode_entity
+                    data:
+                      option: "{{ cfg_ems_mode_active_option }}"
+          - choose:
+              - conditions:
+                  - condition: template
+                    value_template: >
+                      {{ states(enable_switch_entity) == 'on'
+                         and states(energy_price_entity) not in ['unavailable', 'unknown', 'none']
+                         and states(energy_price_entity) | float(999999) <= cfg_max_energy_price | float(0)
+                         and states(ems_mode_entity_id) == (cfg_ems_mode_active_option | string)
+                         and current_max_amps | float(0) != cfg_max_current | float(0) }}
                 sequence:
                   - service: number.set_value
                     target:
                       entity_id: !input max_current_entity
                     data:
-                      value: "{{ target_amps }}"
+                      value: "{{ cfg_max_current }}"
+    default:
+      - choose:
+          - conditions:
+              - condition: template
+                value_template: >
+                  {{ (current_entity_ready | bool(false))
+                     and current_max_amps | float(0) != 0 }}
+            sequence:
+              - service: number.set_value
+                target:
+                  entity_id: !input max_current_entity
+                data:
+                  value: 0
+      - choose:
+          - conditions:
+              - condition: template
+                value_template: >
+                  {{ (ems_mode_entity_ready | bool(false))
+                     and (states(ems_mode_entity_id) != (cfg_ems_mode_inactive_option | string)) }}
+            sequence:
+              - service: select.select_option
+                target:
+                  entity_id: !input ems_mode_entity
+                data:
+                  option: "{{ cfg_ems_mode_inactive_option }}"
 
 mode: single

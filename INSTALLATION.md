@@ -4,7 +4,8 @@
 
 - Home Assistant installed and running
 - An EV charger integration with a **number entity** for current control
-- A **power sensor** showing grid import/export
+- A **power sensor** showing grid import/export if you use the solar charging blueprint
+- A **Goodwe EMS mode select entity** for grid charging
 - An **`input_boolean` helper** for each blueprint or toggle automation (created in steps below)
 
 ## Method 1: Blueprint Import (Recommended)
@@ -116,16 +117,12 @@ When the solar charge switch is turned off, the blueprint sets the charger curre
 3. Fill in:
    - **Energy Price Sensor**: Sensor showing current energy price in €/kWh (e.g., `sensor.coopernico_go_total`)
    - **Maximum Energy Price**: Maximum price at which charging is allowed in €/kWh (e.g., `0.10`)
-   - **Power Sensor**: Your grid power sensor (e.g., `sensor.grid_power`) — positive when importing
-   - **Max Current Entity**: Your charger's current control (e.g., `number.charger_max_current`)
-   - **Night Charge Enable Switch**: The `input_boolean` you created above (e.g., `input_boolean.grid_charge_enable`)
-   - **Maximum Import Power**: Your grid import cap in Watts (e.g., `3000`)
-   - **Voltage**: Your grid voltage (e.g., `230` or `240`)
-   - **Phases**: Number of phases (`1` or `3`)
-   - **Power Buffer**: Safety margin below import limit (e.g., `400`)
-   - **Min Current**: Minimum amps (e.g., `0`)
-   - **Max Current**: Maximum amps (e.g., `32`)
-   - **Raise Delay**: Minutes to wait before raising current (e.g., `3`)
+   - **Maximum Current Control**: Your charger's current control (e.g., `number.charger_max_current`)
+   - **Maximum Current**: Current to use while grid charging is allowed (e.g., `16` or `32`)
+   - **Grid Charge Enable Switch**: The `input_boolean` you created above (e.g., `input_boolean.grid_charge_enable`)
+   - **Goodwe EMS Mode Entity**: Your Goodwe EMS mode select entity (e.g., `select.goodwe_ems_mode`)
+   - **EMS Mode When Grid Charge Is Active**: Usually `Battery standby`
+   - **EMS Mode When Grid Charge Is Inactive**: Usually `Auto`
 4. Click **"Save"** and give it a name
 
 ### Configure Battery Discharge Power Toggle
@@ -151,7 +148,8 @@ When the solar charge switch is turned off, the blueprint sets the charger curre
 ### Can't Find My Entities?
 - Make sure your charger integration is properly set up
 - Check that entities exist in **Settings** > **Devices & Services** > **Entities**
-- Power sensor should show negative values when exporting (solar) or positive when importing (grid charge)
+- The solar charging power sensor should show negative values when exporting
+- The Goodwe EMS mode entity should be a `select` entity
 
 ### Enable Switch Not Listed?
 - Make sure you created an `input_boolean` helper (not an `input_select` or other type)

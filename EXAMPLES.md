@@ -99,81 +99,59 @@ Schedule End: 21:00:00
 
 ## Grid Charge Examples
 
-These examples use the **Grid Charge** blueprint for charging within a grid import limit and energy price cap. All require an `input_boolean` helper for the enable switch.
+These examples use the **Grid Charge** blueprint for price-gated grid charging. All require an `input_boolean` helper for the enable switch.
 
-### Example 5: Standard Night Charge (3kW Import Limit)
+### Example 5: Standard Price-Gated Night Charge
 
-**Scenario:** Cheap overnight rate, 3kW import limit to avoid breaker trips, single-phase.
+**Scenario:** Cheap overnight rate, charge at 16A while the price is at or below 0.10 €/kWh, and keep the Goodwe battery on standby while charging.
 
 ```yaml
 Energy Price Sensor: sensor.coopernico_go_total  # Current price in €/kWh
-Maximum Energy Price: 0.10                       # Only charge below this price
-Power Sensor: sensor.grid_power                  # Positive when importing
-Max Current Entity: number.charger_charging_current
-Night Charge Enable Switch: input_boolean.grid_charge_enable
-Maximum Import Power: 3000
-Voltage: 230
-Phases: 1
-Power Buffer: 400    # Safety margin below limit
-Min Current: 0
-Max Current: 16
-Raise Delay: 3
+Maximum Energy Price: 0.10                       # Charge at or below this price
+Maximum Current Control: number.charger_charging_current
+Maximum Current: 16
+Grid Charge Enable Switch: input_boolean.grid_charge_enable
+Goodwe EMS Mode Entity: select.goodwe_ems_mode
+EMS Mode When Grid Charge Is Active: Battery standby
+EMS Mode When Grid Charge Is Inactive: Auto
 ```
 
-**How it calculates** (at 800W household load, currently charging at 6A):
-- Charger draw = 6 x 230 = 1380W
-- Total import = 800 + 1380 = 2180W (what the sensor reads)
-- Base load = 2180 - 1380 = 800W
-- Available = 3000 - 800 - 400 = 1800W
-- Target = 1800 / 230 = **7A**
+**Behavior:**
+- At 0.09 €/kWh with the enable switch ON, EMS mode is set to `Battery standby`, then charger current is set to 16A
+- Above 0.10 €/kWh, charger current is set to 0A, then EMS mode is set to `Auto`
 
 ---
 
-### Example 6: High-Power Night Charge (7kW Import Limit)
+### Example 6: High-Power Cheap Window
 
-**Scenario:** Higher import allowance, three-phase charger, want to charge as fast as possible overnight.
+**Scenario:** Charge as fast as the charger allows during a wider cheap-price window.
 
 ```yaml
 Energy Price Sensor: sensor.coopernico_go_total  # Current price in €/kWh
 Maximum Energy Price: 0.15                       # Higher threshold for fast charging
-Power Sensor: sensor.grid_import_power
-Max Current Entity: number.wallbox_max_current
-Night Charge Enable Switch: input_boolean.grid_charge_enable
-Maximum Import Power: 7000
-Voltage: 230
-Phases: 1
-Power Buffer: 500
-Min Current: 6
-Max Current: 32
-Raise Delay: 3
+Maximum Current Control: number.wallbox_max_current
+Maximum Current: 32
+Grid Charge Enable Switch: input_boolean.grid_charge_enable
+Goodwe EMS Mode Entity: select.goodwe_ems_mode
+EMS Mode When Grid Charge Is Active: Battery standby
+EMS Mode When Grid Charge Is Inactive: Auto
 ```
-
-**How it calculates** (at 1000W household load, currently charging at 16A):
-- Charger draw = 16 x 230 = 3680W
-- Total import = 1000 + 3680 = 4680W (what the sensor reads)
-- Base load = 4680 - 3680 = 1000W
-- Available = 7000 - 1000 - 500 = 5500W
-- Target = 5500 / 230 = **23A**
 
 ---
 
-### Example 7: Conservative Night Charge (Low Import Limit)
+### Example 7: Conservative Price Threshold
 
-**Scenario:** Shared building supply, must keep total import very low, slow charging acceptable.
+**Scenario:** Only charge at very low prices and limit the charger to 10A.
 
 ```yaml
 Energy Price Sensor: sensor.coopernico_go_total  # Current price in €/kWh
 Maximum Energy Price: 0.08                       # Very low price threshold
-Power Sensor: sensor.apartment_grid_power
-Max Current Entity: number.ev_max_current
-Night Charge Enable Switch: input_boolean.grid_charge_enable
-Maximum Import Power: 2000
-Voltage: 230
-Phases: 1
-Power Buffer: 500
-Min Current: 0
-Max Current: 10
-Raise Delay: 5
+Maximum Current Control: number.ev_max_current
+Maximum Current: 10
+Grid Charge Enable Switch: input_boolean.grid_charge_enable
+Goodwe EMS Mode Entity: select.goodwe_ems_mode
+EMS Mode When Grid Charge Is Active: Battery standby
+EMS Mode When Grid Charge Is Inactive: Auto
 ```
 
 ---
@@ -261,16 +239,16 @@ When balanced: sensor should show near 0
 
 **Check:**
 - Is the **enable switch** (`input_boolean`) turned ON?
-- Is the current energy price below your configured **Maximum Energy Price**?
-- Is the current time within the schedule window?
-- Is `max_import_power` set high enough? If base load exceeds the limit, target will be 0.
+- Is the current energy price at or below your configured **Maximum Energy Price**?
+- Is the price sensor available and numeric?
+- Does your charger accept the configured **Maximum Current** value?
 
 ### Problem: Charging stops and starts frequently
 
 **Fix:**
-- For grid charging, increase Raise Delay (prevents oscillation)
-- Increase Power Buffer (more stable)
-- Increase Min Current (keeps charging active)
+- Check whether your price sensor changes frequently around the threshold.
+- Raise **Maximum Energy Price** slightly if you intentionally want to tolerate small price fluctuations.
+- Use a tariff period sensor or schedule helper upstream if you want charging grouped into larger time windows.
 
 ---
 
@@ -292,18 +270,12 @@ The formula adds back the charger's current draw because the grid export sensor 
 
 ### Grid Charge
 ```
-charger_draw = current_amps x voltage x phases
-base_load = max(grid_import - charger_draw, 0)
-available_watts = max_import_power - base_load - power_buffer
-target_amps = available_watts / (voltage x phases)    (truncated to integer)
+charge_allowed = enable_switch_on and current_price <= maximum_energy_price
+active: set EMS mode to Battery standby, then set charger current to maximum_current
+inactive: set charger current to 0, then set EMS mode to Auto
 ```
 
-The formula separates household base load from charger consumption to determine how much headroom remains within the import limit.
-
-**Examples (single-phase, 230V, 3000W limit, 400W buffer):**
-- 500W base load: (3000 - 500 - 400) / 230 = **9A**
-- 1000W base load: (3000 - 1000 - 400) / 230 = **6A**
-- 2000W base load: (3000 - 2000 - 400) / 230 = **2A**
+The grid charge blueprint no longer calculates household load or import headroom. It is a price gate plus EMS mode control.
 
 ---
 

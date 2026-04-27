@@ -1,6 +1,6 @@
 # Auto-Charge: Smart EV Charging for Home Assistant
 
-Intelligent EV charging automations that maximize solar power usage during the day and manage grid import limits at night.
+Intelligent EV charging automations that maximize solar power usage during the day and enable price-gated grid charging when energy is cheap.
 
 ## Features
 
@@ -25,12 +25,12 @@ Adjusts charging current in real-time based on available solar export:
 - **Configurable limits**: Active min/max current, voltage, phases, buffer, and schedule window
 
 ### Grid Charge
-Manages grid charging while keeping total grid import below a configurable limit, with optional energy price awareness:
-- **Formula**: `Target Amps = (Max Import - Base Load - Buffer) / (Voltage x Phases)`
-- **Import limiting**: Calculates base household load and ensures charging stays within your grid import cap
-- **Energy price control**: Only charges when the current energy price is below your configured maximum (€/kWh)
+Controls grid charging from an energy price threshold:
+- **Energy price control**: Only charges when the current energy price is at or below your configured maximum (€/kWh)
+- **Goodwe battery protection**: Sets EMS mode to `Battery standby` before charging so the house battery is not used to charge the car
+- **Clean stop behavior**: Sets charger current to `0` and restores EMS mode to `Auto` when the price rises above the threshold or grid charging is disabled
 - **Enable switch**: Toggle charging on/off via an `input_boolean` helper
-- **Same smart logic**: Lowers immediately, raises only after sustained headroom
+- **Startup sync**: Reapplies the correct current and EMS mode when Home Assistant starts
 
 ### Battery Discharge Power Toggle
 Controls a battery discharge power limit from a dashboard-friendly toggle:
@@ -45,7 +45,7 @@ Controls a battery discharge power limit from a dashboard-friendly toggle:
 | Blueprint | File | Purpose |
 |-----------|------|---------|
 | Solar Charge Dynamic Current | `solar_charge_dynamic_current.yaml` | Solar-based daytime charging |
-| Grid Charge | `grid_charge.yaml` | Grid-import-limited charging with energy price control |
+| Grid Charge | `grid_charge.yaml` | Price-gated grid charging with Goodwe EMS mode control |
 | Battery Discharge Power Toggle | `battery_discharge_power_toggle.yaml` | Toggle battery discharge power between stopped and normal values |
 
 ## Installation
@@ -124,16 +124,12 @@ After setup, you get these sensors (example for Tri-Horária):
 5. Configure:
    - **Energy Price Sensor**: Sensor showing current energy price in €/kWh
    - **Maximum Energy Price**: Maximum price at which charging is allowed (default: 0.10 €/kWh)
-   - **Power Sensor**: Grid power sensor (positive when importing)
-   - **Max Current Entity**: Your charger's current control (number entity)
-   - **Night Charge Enable Switch**: The `input_boolean` you created above
-   - **Maximum Import Power**: Grid import cap in Watts (default: 3000W)
-   - **Voltage**: Your grid voltage (default: 230V)
-   - **Phases**: 1 for single-phase, 3 for three-phase (default: 1)
-   - **Power Buffer**: Safety margin below import limit (default: 100W, min: 400W)
-   - **Min Current**: Minimum charging current (default: 0A, max: 4A)
-   - **Max Current**: Maximum charging current (default: 32A)
-   - **Raise Delay**: Minutes to wait before raising current (default: 3 min)
+   - **Maximum Current Control**: Your charger's current control (number entity)
+   - **Maximum Current**: Current to set while charging is allowed (default: 32A)
+   - **Grid Charge Enable Switch**: The `input_boolean` you created above
+   - **Goodwe EMS Mode Entity**: Your Goodwe EMS mode select entity
+   - **EMS Mode When Grid Charge Is Active**: `Battery standby`
+   - **EMS Mode When Grid Charge Is Inactive**: `Auto`
 6. Save the automation
 
 ### Setting Up Battery Discharge Power Toggle
@@ -166,10 +162,10 @@ After setup, you get these sensors (example for Tri-Horária):
 
 ### For Grid Charge:
 - An **energy price sensor** showing the current price in €/kWh
-- A **power sensor** that shows grid import (positive when importing)
 - A **number entity** that controls max charging current
 - An **`input_boolean` helper** to enable/disable grid charging
-- Charger must support dynamic current adjustment
+- A **Goodwe EMS mode `select` entity**
+- Charger must support setting current to `0` to stop charging
 
 ### For Battery Discharge Power Toggle:
 - A **battery discharge power `number` entity** in Watts
@@ -196,15 +192,13 @@ When the enable switch turns OFF or the schedule window ends:
 
 ### Grid Charge Logic
 ```
-Every 20 seconds (if enable switch is ON and energy price ≤ max price):
-1. Read grid import and current charger amps
-2. Calculate charger draw = current_amps x voltage x phases
-3. Calculate base_load = max(grid_import - charger_draw, 0)
-4. Calculate available = max_import_power - base_load - buffer
-5. Calculate target_amps = available / (voltage x phases)  (truncated to integer)
-6. Clamp between min_current and max_current
-7. IF target < current → Lower immediately
-   ELSE IF target > current AND stable for raise_delay → Raise
+On price changes, enable switch changes, Home Assistant start, and every 20 seconds:
+1. If enable switch is ON and energy price ≤ max price:
+   - Set Goodwe EMS mode to Battery standby
+   - Set charger maximum current to the configured Maximum Current
+2. Otherwise:
+   - Set charger maximum current to 0
+   - Set Goodwe EMS mode to Auto
 ```
 
 ## Example Configurations
@@ -216,10 +210,12 @@ See [EXAMPLES.md](EXAMPLES.md) for detailed configuration examples covering sing
 - **Current Range**: 6-16A
 - At 3000W export, 6A current: target = (3000 + 1380 - 100) / 230 = **18A** (clamped to 16A)
 
-### Quick Example: Grid Charge (3kW import limit)
-- **Max Import**: 3000W | **Buffer**: 400W | **Voltage**: 230V | **Max Price**: 0.10 €/kWh
-- **Current Range**: 0-32A | **Raise Delay**: 3 min
-- At 500W base load: target = (3000 - 500 - 400) / 230 = **9A**
+### Quick Example: Grid Charge
+- **Maximum Energy Price**: 0.10 €/kWh
+- **Maximum Current**: 16A
+- **EMS Active**: Battery standby | **EMS Inactive**: Auto
+- When price is 0.09 €/kWh and the enable switch is ON, current is set to 16A
+- When price rises above 0.10 €/kWh, current is set to 0A and EMS mode is set to Auto
 
 ## Compatible Chargers
 
@@ -236,19 +232,19 @@ Works with any Home Assistant integrated charger that supports dynamic current c
 
 ### Current not adjusting?
 - Check that the **enable switch** (`input_boolean`) is turned ON
-- Check that power sensor is negative when exporting (solar blueprint) or positive when importing (grid charge blueprint)
+- Check that the solar power sensor is negative when exporting if you are using the solar blueprint
 - Verify the max current entity is writable
 - Check automation traces in Home Assistant
-- Make sure you're within the schedule window
+- Make sure you're within the solar schedule window if you are using the solar blueprint
 
 ### Grid charging not working?
 - Check that the **enable switch** (`input_boolean`) is turned ON
-- Verify the current energy price is below your configured maximum
-- Check that `max_import_power` is set high enough for your needs
+- Verify the current energy price is at or below your configured maximum
+- Verify the charger accepts `0` as a stop current and your configured active current as a start current
+- Verify the Goodwe EMS options exactly match your select entity options, usually `Battery standby` and `Auto`
 
 ### Too much oscillation?
-- For grid charging, increase **Raise Delay** (e.g., 5-10 minutes)
-- Increase **Power Buffer** (e.g., 200-500W)
+- For solar charging, increase **Power Buffer** (e.g., 200-500W)
 
 ### Importing from grid during solar charging?
 - Increase **Power Buffer** to create larger safety margin
