@@ -130,10 +130,7 @@ action:
               - conditions:
                   - condition: template
                     value_template: >
-                      {{ states(enable_switch_entity) == 'on'
-                         and states(energy_price_entity) not in ['unavailable', 'unknown', 'none']
-                         and states(energy_price_entity) | float(999999) <= cfg_max_energy_price | float(0)
-                         and states(ems_mode_entity_id) == (cfg_ems_mode_active_option | string)
+                      {{ (current_entity_ready | bool(false))
                          and current_max_amps | float(0) != cfg_max_current | float(0) }}
                 sequence:
                   - service: number.set_value
