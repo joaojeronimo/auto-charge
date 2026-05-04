@@ -196,9 +196,18 @@ action:
         {{ (resolved_ems_mode_active_option | string) in ems_mode_options }}
       ems_mode_inactive_option_valid: >
         {{ (resolved_ems_mode_inactive_option | string) in ems_mode_options }}
-      grid_charge_conditions_met: >
+      price_is_allowed: >
         {{ price_sensor_ready | bool(false)
-           and states(energy_price_entity) | float(999999) <= cfg_max_energy_price | float(0)
+           and states(energy_price_entity) | float(999999) <= cfg_max_energy_price | float(0) }}
+      price_crossed_above_max: >
+        {{ trigger is defined
+           and trigger.id == 'price_changed'
+           and trigger.from_state is not none
+           and trigger.to_state is not none
+           and trigger.from_state.state | float(999999) <= cfg_max_energy_price | float(0)
+           and trigger.to_state.state | float(999999) > cfg_max_energy_price | float(0) }}
+      grid_charge_conditions_met: >
+        {{ price_is_allowed | bool(false)
            and current_entity_ready | bool(false)
            and enable_switch_ready | bool(false)
            and ems_mode_entity_ready | bool(false)
@@ -211,13 +220,19 @@ action:
            or ((grid_charge_enabled | bool(false) or grid_charge_was_enabled | bool(false))
                and current_entity_ready | bool(false)
                and current_max_amps | float(0) == cfg_max_current | float(0)) }}
+      grid_charge_should_start: >
+        {{ grid_charge_enabled | bool(false)
+           and grid_charge_conditions_met | bool(false) }}
+      grid_charge_should_stop: >
+        {{ grid_charge_was_enabled | bool(false)
+           or grid_charge_session_active | bool(false)
+           or (grid_charge_enabled | bool(false)
+               and price_crossed_above_max | bool(false)) }}
 
   - choose:
       - conditions:
           - condition: template
-            value_template: >
-              {{ grid_charge_enabled | bool(false)
-                 and grid_charge_conditions_met | bool(false) }}
+            value_template: "{{ grid_charge_should_start | bool(false) }}"
         sequence:
           - choose:
               - conditions:
@@ -252,7 +267,7 @@ action:
 
       - conditions:
           - condition: template
-            value_template: "{{ grid_charge_session_active | bool(false) }}"
+            value_template: "{{ grid_charge_should_stop | bool(false) }}"
         sequence:
           - choose:
               - conditions:
