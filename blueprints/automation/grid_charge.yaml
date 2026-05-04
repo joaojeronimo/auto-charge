@@ -4,7 +4,7 @@ blueprint:
     Enables EV grid charging only while the current energy price is at or below a configurable maximum.
     - Starts charging by setting Goodwe EMS mode to Battery standby before raising charger maximum current
     - Stops grid charging when the price rises above the maximum, the price sensor is unavailable, or the enable switch is turned off
-    - Stops only grid-charge-owned sessions by setting charger maximum current to 0, then setting Goodwe EMS mode back to Auto
+    - Stops only sessions tracked by the Grid Charge Active Helper by setting charger maximum current to 0, then setting Goodwe EMS mode back to Auto
     - Leaves charger current untouched while inactive so solar or other automations can control it
   domain: automation
   source_url: https://github.com/yourusername/auto-charge
@@ -52,6 +52,15 @@ blueprint:
         entity:
           domain: input_boolean
 
+    grid_charge_state_helper:
+      name: Grid Charge Active Helper
+      description: >
+        Input boolean helper used to track whether this automation currently owns a grid-charge session.
+        Create one in Settings > Devices & Services > Helpers.
+      selector:
+        entity:
+          domain: input_boolean
+
     ems_mode_entity:
       name: Goodwe EMS Mode Entity
       description: Select entity for Goodwe EMS mode
@@ -77,6 +86,7 @@ variables:
   cfg_max_current: !input max_current
   max_current_entity_id: !input max_current_entity
   enable_switch_entity: !input enable_switch
+  grid_charge_state_entity: !input grid_charge_state_helper
   energy_price_entity: !input energy_price_sensor
   cfg_max_energy_price: !input max_energy_price
   ems_mode_entity_id: !input ems_mode_entity
@@ -99,22 +109,42 @@ trigger:
 
 action:
   - variables:
+      grid_charge_enabled: "{{ states(enable_switch_entity) == 'on' }}"
+      price_sensor_ready: "{{ states(energy_price_entity) not in ['unavailable', 'unknown', 'none'] }}"
       current_entity_ready: "{{ states(max_current_entity_id) not in ['unavailable', 'unknown', 'none'] }}"
+      grid_charge_state_ready: "{{ states(grid_charge_state_entity) not in ['unavailable', 'unknown', 'none'] }}"
+      grid_charge_is_active: "{{ states(grid_charge_state_entity) == 'on' }}"
       ems_mode_entity_ready: >
         {{ states(ems_mode_entity_id) not in ['unavailable', 'unknown', 'none'] }}
       current_max_amps: "{{ states(max_current_entity_id) | float(0) }}"
+
+  - variables:
+      grid_charge_conditions_met: >
+        {{ price_sensor_ready | bool(false)
+           and states(energy_price_entity) | float(999999) <= cfg_max_energy_price | float(0)
+           and current_entity_ready | bool(false)
+           and grid_charge_state_ready | bool(false)
+           and ems_mode_entity_ready | bool(false) }}
+      grid_charge_was_active: >
+        {{ grid_charge_is_active | bool(false) }}
+
   - choose:
       - conditions:
-          - condition: state
-            entity_id: !input enable_switch
-            state: "on"
           - condition: template
             value_template: >
-              {{ states(energy_price_entity) not in ['unavailable', 'unknown', 'none']
-                 and states(energy_price_entity) | float(999999) <= cfg_max_energy_price | float(0)
-                 and current_entity_ready | bool(false)
-                 and ems_mode_entity_ready | bool(false) }}
+              {{ grid_charge_enabled | bool(false)
+                 and grid_charge_conditions_met | bool(false) }}
         sequence:
+          - choose:
+              - conditions:
+                  - condition: template
+                    value_template: >
+                      {{ (grid_charge_state_ready | bool(false))
+                         and not (grid_charge_is_active | bool(false)) }}
+                sequence:
+                  - service: input_boolean.turn_on
+                    target:
+                      entity_id: !input grid_charge_state_helper
           - choose:
               - conditions:
                   - condition: template
@@ -142,9 +172,7 @@ action:
 
       - conditions:
           - condition: template
-            value_template: >
-              {{ (ems_mode_entity_ready | bool(false))
-                 and states(ems_mode_entity_id) == (cfg_ems_mode_active_option | string) }}
+            value_template: "{{ grid_charge_was_active | bool(false) }}"
         sequence:
           - choose:
               - conditions:
@@ -163,6 +191,7 @@ action:
                   - condition: template
                     value_template: >
                       {{ (ems_mode_entity_ready | bool(false))
+                         and (current_entity_ready | bool(false))
                          and (states(ems_mode_entity_id) != (cfg_ems_mode_inactive_option | string)) }}
                 sequence:
                   - service: select.select_option
@@ -170,5 +199,25 @@ action:
                       entity_id: !input ems_mode_entity
                     data:
                       option: "{{ cfg_ems_mode_inactive_option }}"
+          - wait_template: >
+              {{ states(max_current_entity_id) not in ['unavailable', 'unknown', 'none']
+                 and states(ems_mode_entity_id) not in ['unavailable', 'unknown', 'none']
+                 and states(max_current_entity_id) | float(999999) == 0
+                 and states(ems_mode_entity_id) == (cfg_ems_mode_inactive_option | string) }}
+            timeout: "00:00:15"
+            continue_on_timeout: true
+          - choose:
+              - conditions:
+                  - condition: template
+                    value_template: >
+                      {{ (current_entity_ready | bool(false))
+                         and (ems_mode_entity_ready | bool(false))
+                         and states(max_current_entity_id) | float(999999) == 0
+                         and states(ems_mode_entity_id) == (cfg_ems_mode_inactive_option | string)
+                         and (grid_charge_state_ready | bool(false)) }}
+                sequence:
+                  - service: input_boolean.turn_off
+                    target:
+                      entity_id: !input grid_charge_state_helper
 
-mode: single
+mode: restart

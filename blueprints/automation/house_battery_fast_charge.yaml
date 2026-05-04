@@ -1,0 +1,199 @@
+blueprint:
+  name: House Battery Fast Charge Until Price Threshold
+  description: |
+    Starts house battery fast charging from an enable helper and stops it when the energy price reaches a configured threshold.
+    - Turn the configured enable switch on to start one fast-charge session
+    - Turns on the configured house battery fast-charge switch while the price is below the stop threshold
+    - Stops fast charging when the price reaches or exceeds the threshold, the price sensor is unavailable, or the enable switch is turned off
+    - When stopped by price or unavailable price data, turns the enable switch off so charging will not restart automatically
+    - Uses an active helper so it only stops fast-charge sessions started by this automation
+  domain: automation
+  source_url: https://github.com/yourusername/auto-charge
+  input:
+    enable_switch:
+      name: Fast Charge Enable Switch
+      description: >
+        Input boolean helper used to start/stop one house battery fast-charge session.
+        Turn it on to start fast charging; the automation turns it off when the session stops.
+      selector:
+        entity:
+          domain: input_boolean
+
+    fast_charge_state_helper:
+      name: Fast Charge Active Helper
+      description: >
+        Input boolean helper used to track whether this automation currently owns a fast-charge session.
+        Create one in Settings > Devices & Services > Helpers.
+      selector:
+        entity:
+          domain: input_boolean
+
+    fast_charge_switch:
+      name: Battery Fast Charge Switch
+      description: Switch entity that enables fast charging for the house battery
+      selector:
+        entity:
+          domain: switch
+
+    energy_price_sensor:
+      name: Energy Price Sensor
+      description: Sensor that shows the current energy price (in €/kWh)
+      selector:
+        entity:
+          domain: sensor
+
+    stop_energy_price:
+      name: Stop Energy Price
+      description: Energy price at or above which fast charging is stopped (in €/kWh)
+      default: 0.10
+      selector:
+        number:
+          min: 0.0
+          max: 1.0
+          step: 0.01
+          unit_of_measurement: "€/kWh"
+
+variables:
+  enable_switch_entity: !input enable_switch
+  fast_charge_state_entity: !input fast_charge_state_helper
+  fast_charge_switch_entity: !input fast_charge_switch
+  energy_price_entity: !input energy_price_sensor
+  cfg_stop_energy_price: !input stop_energy_price
+
+trigger:
+  - id: "sync"
+    platform: time_pattern
+    seconds: "/20"
+  - id: "enable_on"
+    platform: state
+    entity_id: !input enable_switch
+    to: "on"
+  - id: "enable_off"
+    platform: state
+    entity_id: !input enable_switch
+    to: "off"
+  - id: "price_changed"
+    platform: state
+    entity_id: !input energy_price_sensor
+  - id: "fast_charge_switch_changed"
+    platform: state
+    entity_id: !input fast_charge_switch
+  - id: "homeassistant_started"
+    platform: homeassistant
+    event: start
+
+action:
+  - variables:
+      enable_is_on: "{{ states(enable_switch_entity) == 'on' }}"
+      price_sensor_ready: "{{ states(energy_price_entity) not in ['unavailable', 'unknown', 'none'] }}"
+      fast_charge_state_ready: "{{ states(fast_charge_state_entity) not in ['unavailable', 'unknown', 'none'] }}"
+      fast_charge_session_active: "{{ states(fast_charge_state_entity) == 'on' }}"
+      fast_charge_switch_ready: "{{ states(fast_charge_switch_entity) not in ['unavailable', 'unknown', 'none'] }}"
+      fast_charge_is_on: "{{ states(fast_charge_switch_entity) == 'on' }}"
+
+  - variables:
+      price_at_or_above_threshold: >
+        {{ (price_sensor_ready | bool(false))
+           and states(energy_price_entity) | float(999999) >= cfg_stop_energy_price | float(0) }}
+
+  - choose:
+      - alias: "Start fast charging while enabled and below the stop price"
+        conditions:
+          - condition: template
+            value_template: >
+              {{ enable_is_on | bool(false)
+                 and price_sensor_ready | bool(false)
+                 and fast_charge_state_ready | bool(false)
+                 and fast_charge_switch_ready | bool(false)
+                 and not (price_at_or_above_threshold | bool(false)) }}
+        sequence:
+          - choose:
+              - conditions:
+                  - condition: template
+                    value_template: >
+                      {{ fast_charge_state_ready | bool(false)
+                         and not (fast_charge_session_active | bool(false)) }}
+                sequence:
+                  - service: input_boolean.turn_on
+                    target:
+                      entity_id: !input fast_charge_state_helper
+          - choose:
+              - conditions:
+                  - condition: template
+                    value_template: >
+                      {{ fast_charge_switch_ready | bool(false)
+                         and not (fast_charge_is_on | bool(false)) }}
+                sequence:
+                  - service: switch.turn_on
+                    target:
+                      entity_id: !input fast_charge_switch
+
+      - alias: "Stop fast charging when the active session is no longer allowed"
+        conditions:
+          - condition: template
+            value_template: >
+              {{ enable_is_on | bool(false)
+                 and (not (price_sensor_ready | bool(false))
+                      or price_at_or_above_threshold | bool(false)) }}
+        sequence:
+          - choose:
+              - conditions:
+                  - condition: template
+                    value_template: >
+                      {{ fast_charge_session_active | bool(false)
+                         and fast_charge_switch_ready | bool(false)
+                         and fast_charge_is_on | bool(false) }}
+                sequence:
+                  - service: switch.turn_off
+                    target:
+                      entity_id: !input fast_charge_switch
+          - service: input_boolean.turn_off
+            target:
+              entity_id: !input enable_switch
+          - wait_template: "{{ states(fast_charge_switch_entity) == 'off' }}"
+            timeout: "00:00:15"
+            continue_on_timeout: true
+          - choose:
+              - conditions:
+                  - condition: template
+                    value_template: >
+                      {{ fast_charge_session_active | bool(false)
+                         and fast_charge_state_ready | bool(false)
+                         and states(fast_charge_switch_entity) == 'off' }}
+                sequence:
+                  - service: input_boolean.turn_off
+                    target:
+                      entity_id: !input fast_charge_state_helper
+
+      - alias: "Stop fast charging when the enable switch is turned off"
+        conditions:
+          - condition: template
+            value_template: >
+              {{ not (enable_is_on | bool(false))
+                 and fast_charge_session_active | bool(false) }}
+        sequence:
+          - choose:
+              - conditions:
+                  - condition: template
+                    value_template: >
+                      {{ fast_charge_switch_ready | bool(false)
+                         and fast_charge_is_on | bool(false) }}
+                sequence:
+                  - service: switch.turn_off
+                    target:
+                      entity_id: !input fast_charge_switch
+          - wait_template: "{{ states(fast_charge_switch_entity) == 'off' }}"
+            timeout: "00:00:15"
+            continue_on_timeout: true
+          - choose:
+              - conditions:
+                  - condition: template
+                    value_template: >
+                      {{ fast_charge_state_ready | bool(false)
+                         and states(fast_charge_switch_entity) == 'off' }}
+                sequence:
+                  - service: input_boolean.turn_off
+                    target:
+                      entity_id: !input fast_charge_state_helper
+
+mode: restart
