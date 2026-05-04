@@ -73,7 +73,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added **Maximum Energy Price** input — configurable price cap for charging (default: 0.10 €/kWh)
 - Removed schedule start/end time inputs from Grid Charge (charging is now controlled by enable switch and energy price)
 - Grid Charge now checks the enable switch as a native state condition before starting grid charging
-- Grid Charge now leaves charger current unchanged while inactive unless it was already actively grid charging, allowing Solar Charge Dynamic Current to keep controlling the charger during expensive daytime periods
+- Removed the duplicate Grid Charge Active Helper input; the Grid Charge Enable Switch now starts and tracks one grid-charge session
+- Grid Charge now leaves charger current unchanged while the enable switch is off, allowing Solar Charge Dynamic Current to keep controlling the charger during inactive periods
 - Solar Charge Dynamic Current now sets the charger current to `0` when disabled or when the schedule window ends
 - Solar Charge Dynamic Current now enforces the configured `max_current` immediately instead of waiting on the import debounce path
 
