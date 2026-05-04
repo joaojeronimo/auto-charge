@@ -1,0 +1,127 @@
+blueprint:
+  name: Battery Preservation Max Charge
+  description: |
+    Manages a battery maximum charge percentage to reduce time spent at a high state of charge.
+    - Sets the configured normal maximum charge for most of the day
+    - Sets a lower preservation maximum charge during a configured time window, such as late afternoon
+    - Reapplies the correct value when Home Assistant starts, when the number entity changes, and on a periodic sync
+    - Designed for battery integrations that expose the maximum charge limit as a percentage-based number entity
+  domain: automation
+  source_url: https://github.com/yourusername/auto-charge
+  input:
+    max_charge_entity:
+      name: Battery Max Charge Entity
+      description: Number entity that controls the battery maximum charge percentage
+      selector:
+        entity:
+          domain: number
+
+    normal_max_charge:
+      name: Normal Maximum Charge
+      description: Maximum charge percentage to use outside the preservation window
+      default: 95
+      selector:
+        number:
+          min: 0
+          max: 100
+          step: 1
+          unit_of_measurement: "%"
+
+    preservation_max_charge:
+      name: Preservation Maximum Charge
+      description: Lower maximum charge percentage to use during the preservation window
+      default: 90
+      selector:
+        number:
+          min: 0
+          max: 100
+          step: 1
+          unit_of_measurement: "%"
+
+    preservation_start_time:
+      name: Preservation Start Time
+      description: Time to start using the lower preservation maximum charge
+      default: "16:00:00"
+      selector:
+        time:
+
+    normal_restore_time:
+      name: Normal Restore Time
+      description: Time to restore the normal maximum charge percentage
+      default: "00:00:00"
+      selector:
+        time:
+
+variables:
+  max_charge_entity_id: !input max_charge_entity
+  cfg_normal_max_charge: !input normal_max_charge
+  cfg_preservation_max_charge: !input preservation_max_charge
+  cfg_preservation_start_time: !input preservation_start_time
+  cfg_normal_restore_time: !input normal_restore_time
+
+trigger:
+  - id: "periodic_sync"
+    platform: time_pattern
+    minutes: "/5"
+
+  - id: "preservation_started"
+    platform: time
+    at: !input preservation_start_time
+
+  - id: "normal_restored"
+    platform: time
+    at: !input normal_restore_time
+
+  - id: "max_charge_changed"
+    platform: state
+    entity_id: !input max_charge_entity
+
+  - id: "homeassistant_started"
+    platform: homeassistant
+    event: start
+
+action:
+  - variables:
+      max_charge_entity_ready: "{{ states(max_charge_entity_id) not in ['unavailable', 'unknown', 'none'] }}"
+      current_max_charge: "{{ states(max_charge_entity_id) | float(0) }}"
+      preservation_window_active: >-
+        {% set start = today_at(cfg_preservation_start_time) %}
+        {% set end = today_at(cfg_normal_restore_time) %}
+        {% if start == end %}
+          false
+        {% else %}
+          {{ start <= now() < end if start < end else now() >= start or now() < end }}
+        {% endif %}
+
+  - variables:
+      requested_target_max_charge: >
+        {% if preservation_window_active | bool(false) %}
+          {{ cfg_preservation_max_charge | float(90) }}
+        {% else %}
+          {{ cfg_normal_max_charge | float(95) }}
+        {% endif %}
+      entity_min_charge: "{{ state_attr(max_charge_entity_id, 'min') | default(0, true) | float(0) }}"
+      entity_max_charge: "{{ state_attr(max_charge_entity_id, 'max') | default(100, true) | float(100) }}"
+
+  - variables:
+      target_max_charge: >
+        {% set requested = requested_target_max_charge | float(95) %}
+        {% set min_charge = entity_min_charge | float(0) %}
+        {% set max_charge = entity_max_charge | float(100) %}
+        {{ [[requested, max_charge] | min, min_charge] | max }}
+
+  - choose:
+      - conditions:
+          - condition: template
+            value_template: >
+              {{ (max_charge_entity_ready | bool(false))
+                 and ((current_max_charge | float(0) - target_max_charge | float(0)) | abs > 0.001) }}
+        sequence:
+          - service: number.set_value
+            target:
+              entity_id: !input max_charge_entity
+            data:
+              value: "{{ target_max_charge }}"
+
+mode: restart
+max_exceeded: silent

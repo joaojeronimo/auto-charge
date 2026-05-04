@@ -6,7 +6,8 @@
 - An EV charger integration with a **number entity** for current control
 - A **power sensor** showing grid import/export if you use the solar charging blueprint
 - A **Goodwe EMS mode select entity** for grid charging
-- An **`input_boolean` helper** for each blueprint or toggle automation (created in steps below)
+- A battery maximum charge **number entity** if you use the battery preservation blueprint
+- An **`input_boolean` helper** for each blueprint that uses a dashboard toggle (created in steps below)
 
 ## Method 1: Blueprint Import (Recommended)
 
@@ -39,10 +40,18 @@
      ```
    - Click **"Preview"** then **"Import"**
 
-5. **Verify Installation**
+5. **Import Battery Preservation Max Charge Blueprint**
+   - Click **"Import Blueprint"** again
+   - Paste the URL:
+     ```
+     https://github.com/yourusername/auto-charge/blob/main/blueprints/automation/battery_preservation_max_charge.yaml
+     ```
+   - Click **"Preview"** then **"Import"**
+
+6. **Verify Installation**
    - Go to **Settings** > **Automations & Scenes**
    - Click **"Create Automation"** > **"Use a Blueprint"**
-   - You should see **"Solar Charge Dynamic Current"**, **"Grid Charge"**, and **"Battery Discharge Power Toggle"**
+   - You should see **"Solar Charge Dynamic Current"**, **"Grid Charge"**, **"Battery Discharge Power Toggle"**, and **"Battery Preservation Max Charge"**
 
 ## Method 2: Manual Installation
 
@@ -53,6 +62,7 @@
      - `blueprints/automation/solar_charge_dynamic_current.yaml`
      - `blueprints/automation/grid_charge.yaml`
      - `blueprints/automation/battery_discharge_power_toggle.yaml`
+     - `blueprints/automation/battery_preservation_max_charge.yaml`
 
 2. **Create Directory**
    - Navigate to your Home Assistant config directory
@@ -76,13 +86,13 @@
    - Or restart Home Assistant
 
 5. **Verify Installation**
-   - Same as Method 1 step 4
+   - Same as Method 1 step 6
 
 ## Next Steps
 
-### Create Enable Switches (Required for Both Blueprints)
+### Create Enable Switches (Required Where Used)
 
-Before configuring the blueprints, create `input_boolean` helpers for each mode you want:
+Before configuring the blueprints that use dashboard toggles, create `input_boolean` helpers for each mode you want:
 
 1. Go to **Settings** > **Devices & Services** > **Helpers**
 2. Click **"+ Create Helper"** > **"Toggle"**
@@ -93,6 +103,7 @@ Before configuring the blueprints, create `input_boolean` helpers for each mode 
 
 These toggle switches let you turn each charging mode on and off independently. You can add them to your dashboard for easy access.
 When the solar charge switch is turned off, the blueprint sets the charger current to `0`.
+The battery preservation blueprint does not need an `input_boolean`; disabling the automation itself stops it from managing the max charge limit.
 
 ### Configure Solar Charge Dynamic Current
 
@@ -140,6 +151,18 @@ The grid charge enable switch is the only helper this blueprint needs. When it i
    - **Normal Discharge Power**: Your usual discharge limit in Watts (e.g., `5000`)
 4. Click **"Save"** and give it a name
 
+### Configure Battery Preservation Max Charge
+
+1. **Settings** > **Automations & Scenes** > **"Create Automation"**
+2. Select **"Use a Blueprint"** > **"Battery Preservation Max Charge"**
+3. Fill in:
+   - **Battery Max Charge Entity**: Your battery maximum charge percentage number entity (e.g., `number.battery_max_charge`)
+   - **Normal Maximum Charge**: The normal daily charge limit, such as `95`
+   - **Preservation Maximum Charge**: The lower limit to use during the preservation window, such as `90`
+   - **Preservation Start Time**: When to lower the limit, such as `16:00:00`
+   - **Normal Restore Time**: When to restore the normal limit, such as `00:00:00`
+4. Click **"Save"** and give it a name
+
 ## Troubleshooting
 
 ### Blueprints Not Showing Up?
@@ -152,11 +175,12 @@ The grid charge enable switch is the only helper this blueprint needs. When it i
 - Check that entities exist in **Settings** > **Devices & Services** > **Entities**
 - The solar charging power sensor should show negative values when exporting
 - The Goodwe EMS mode entity should be a `select` entity
+- The battery preservation max charge entity should be a writable `number` entity
 
 ### Enable Switch Not Listed?
 - Make sure you created an `input_boolean` helper (not an `input_select` or other type)
 - The entity selector filters by `input_boolean` domain — only toggle helpers will appear
-- You need a separate `input_boolean` for each blueprint (solar and grid charge)
+- You need a separate `input_boolean` for each toggle-based blueprint (for example solar charge, grid charge, and battery discharge hold)
 
 ### Need Help?
 - Check the [full documentation](README.md)

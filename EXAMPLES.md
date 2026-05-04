@@ -182,6 +182,29 @@ Normal Discharge Power: 5000
 
 ---
 
+## Battery Preservation Max Charge Examples
+
+These examples use the **Battery Preservation Max Charge** blueprint for battery systems that expose a writable maximum charge percentage.
+
+### Example 9: Keep Battery Below High SOC Most of the Day
+
+**Scenario:** Your inverter exposes a maximum charge percentage number entity. You want the battery capped at 95% normally, then capped at 90% from late afternoon until midnight.
+
+```yaml
+Battery Max Charge Entity: number.battery_max_charge
+Normal Maximum Charge: 95
+Preservation Maximum Charge: 90
+Preservation Start Time: 16:00:00
+Normal Restore Time: 00:00:00
+```
+
+**Behavior:**
+- From `00:00` to `16:00`, writes `95%`
+- From `16:00` to `00:00`, writes `90%`
+- On Home Assistant restart or manual changes to the number entity, reapplies the scheduled value
+
+---
+
 ## Sensor Requirements
 
 Your power sensor should:

@@ -41,6 +41,14 @@ Controls a battery discharge power limit from a dashboard-friendly toggle:
 - **Price override**: If the current electricity price is at or above your threshold, battery discharge is restored automatically
 - **Startup sync**: Reapplies the selected mode when Home Assistant starts
 
+### Battery Preservation Max Charge
+Keeps a battery maximum charge limit lower during a configured time window:
+- **Percentage control**: Writes directly to a battery max charge `number` entity
+- **Normal limit**: Uses `95%` by default outside the preservation window
+- **Preservation limit**: Uses `90%` by default from late afternoon until midnight
+- **Startup sync**: Reapplies the correct limit when Home Assistant starts
+- **Manual-change correction**: Restores the scheduled value if the entity is changed externally
+
 ## Blueprints
 
 | Blueprint | File | Purpose |
@@ -48,6 +56,7 @@ Controls a battery discharge power limit from a dashboard-friendly toggle:
 | Solar Charge Dynamic Current | `solar_charge_dynamic_current.yaml` | Solar-based daytime charging |
 | Grid Charge | `grid_charge.yaml` | Price-gated grid charging with Goodwe EMS mode control |
 | Battery Discharge Power Toggle | `battery_discharge_power_toggle.yaml` | Toggle battery discharge power between stopped and normal values |
+| Battery Preservation Max Charge | `battery_preservation_max_charge.yaml` | Schedule battery max charge between normal and preservation percentages |
 
 ## Installation
 
@@ -153,6 +162,19 @@ After setup, you get these sensors (example for Tri-Horária):
    - **Normal Discharge Power**: Your usual discharge limit, such as `5000`
 6. Save the automation
 
+### Setting Up Battery Preservation Max Charge
+
+1. Go to **Settings** > **Automations & Scenes**
+2. Click **"+ Create Automation"** > **"Use a Blueprint"**
+3. Select **"Battery Preservation Max Charge"**
+4. Configure:
+   - **Battery Max Charge Entity**: Your battery maximum charge `number` entity
+   - **Normal Maximum Charge**: Usually `95`
+   - **Preservation Maximum Charge**: Usually `90`
+   - **Preservation Start Time**: When to lower the limit, such as `16:00:00`
+   - **Normal Restore Time**: When to restore the normal limit, such as `00:00:00`
+5. Save the automation
+
 ## Requirements
 
 ### For Solar Charge Dynamic Current:
@@ -172,6 +194,9 @@ After setup, you get these sensors (example for Tri-Horária):
 - A **battery discharge power `number` entity** in Watts
 - An **electricity price sensor** showing the current price in €/kWh
 - An **`input_boolean` helper** to act as the stop/normal toggle
+
+### For Battery Preservation Max Charge:
+- A **battery maximum charge `number` entity** that accepts percentage values
 
 ## How It Works
 
@@ -204,9 +229,18 @@ On price changes, enable switch changes, Home Assistant start, and every 20 seco
    - Leave charger maximum current unchanged so solar or other automations can control it
 ```
 
+### Battery Preservation Max Charge Logic
+```
+On the configured times, Home Assistant start, entity changes, and every 5 minutes:
+1. If currently inside the preservation window:
+   - Set battery maximum charge to the preservation percentage, default 90%
+2. Otherwise:
+   - Set battery maximum charge to the normal percentage, default 95%
+```
+
 ## Example Configurations
 
-See [EXAMPLES.md](EXAMPLES.md) for detailed configuration examples covering single-phase, three-phase, conservative, and aggressive setups.
+See [EXAMPLES.md](EXAMPLES.md) for detailed configuration examples covering single-phase, three-phase, conservative, aggressive, and battery preservation setups.
 
 ### Quick Example: Single-Phase Solar (230V)
 - **Voltage**: 230V | **Phases**: 1 | **Buffer**: 100W
