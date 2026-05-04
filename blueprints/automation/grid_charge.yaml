@@ -141,6 +141,11 @@ action:
   - variables:
       enable_switch_ready: "{{ states(enable_switch_entity) not in ['unavailable', 'unknown', 'none'] }}"
       grid_charge_enabled: "{{ states(enable_switch_entity) == 'on' }}"
+      grid_charge_was_enabled: >
+        {{ trigger is defined
+           and trigger.id == 'switch_toggled'
+           and trigger.from_state is not none
+           and trigger.from_state.state == 'on' }}
       price_sensor_ready: "{{ states(energy_price_entity) not in ['unavailable', 'unknown', 'none'] }}"
       current_entity_ready: "{{ states(max_current_entity_id) not in ['unavailable', 'unknown', 'none'] }}"
       ems_mode_entity_ready: >
@@ -200,9 +205,12 @@ action:
            and ems_mode_active_option_valid | bool(false)
            and ems_mode_inactive_option_valid | bool(false) }}
       grid_charge_session_active: >
-        {{ ems_mode_entity_ready | bool(false)
-           and ems_mode_active_option_valid | bool(false)
-           and states(ems_mode_entity_id) == (resolved_ems_mode_active_option | string) }}
+        {{ (ems_mode_entity_ready | bool(false)
+            and ems_mode_active_option_valid | bool(false)
+            and states(ems_mode_entity_id) == (resolved_ems_mode_active_option | string))
+           or ((grid_charge_enabled | bool(false) or grid_charge_was_enabled | bool(false))
+               and current_entity_ready | bool(false)
+               and current_max_amps | float(0) == cfg_max_current | float(0)) }}
 
   - choose:
       - conditions:
