@@ -48,8 +48,8 @@ blueprint:
     enable_switch:
       name: Grid Charge Enable Switch
       description: >
-        Input boolean helper used to start/stop one grid-charge session.
-        Turn it on to start grid charging; the automation turns it off when the session stops.
+        Input boolean helper used to enable/disable grid charging.
+        Turn it on to allow grid charging when the price is low enough.
       selector:
         entity:
           domain: input_boolean
@@ -102,7 +102,7 @@ trigger:
 action:
   - variables:
       enable_switch_ready: "{{ states(enable_switch_entity) not in ['unavailable', 'unknown', 'none'] }}"
-      grid_charge_is_active: "{{ states(enable_switch_entity) == 'on' }}"
+      grid_charge_enabled: "{{ states(enable_switch_entity) == 'on' }}"
       price_sensor_ready: "{{ states(energy_price_entity) not in ['unavailable', 'unknown', 'none'] }}"
       current_entity_ready: "{{ states(max_current_entity_id) not in ['unavailable', 'unknown', 'none'] }}"
       ems_mode_entity_ready: >
@@ -116,18 +116,15 @@ action:
            and current_entity_ready | bool(false)
            and enable_switch_ready | bool(false)
            and ems_mode_entity_ready | bool(false) }}
-      grid_charge_was_active: >
-        {{ grid_charge_is_active | bool(false)
-           or (trigger is defined
-               and trigger.id == 'switch_toggled'
-               and trigger.from_state is not none
-               and trigger.from_state.state == 'on') }}
+      grid_charge_session_active: >
+        {{ ems_mode_entity_ready | bool(false)
+           and states(ems_mode_entity_id) == (cfg_ems_mode_active_option | string) }}
 
   - choose:
       - conditions:
           - condition: template
             value_template: >
-              {{ grid_charge_is_active | bool(false)
+              {{ grid_charge_enabled | bool(false)
                  and grid_charge_conditions_met | bool(false) }}
         sequence:
           - choose:
@@ -157,7 +154,7 @@ action:
 
       - conditions:
           - condition: template
-            value_template: "{{ grid_charge_was_active | bool(false) }}"
+            value_template: "{{ grid_charge_session_active | bool(false) }}"
         sequence:
           - choose:
               - conditions:
@@ -191,18 +188,5 @@ action:
                  and states(ems_mode_entity_id) == (cfg_ems_mode_inactive_option | string) }}
             timeout: "00:00:15"
             continue_on_timeout: true
-          - choose:
-              - conditions:
-                  - condition: template
-                    value_template: >
-                      {{ (current_entity_ready | bool(false))
-                         and (ems_mode_entity_ready | bool(false))
-                         and states(max_current_entity_id) | float(999999) == 0
-                         and states(ems_mode_entity_id) == (cfg_ems_mode_inactive_option | string)
-                         and (enable_switch_ready | bool(false)) }}
-                sequence:
-                  - service: input_boolean.turn_off
-                    target:
-                      entity_id: !input enable_switch
 
 mode: restart

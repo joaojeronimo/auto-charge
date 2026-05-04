@@ -119,8 +119,8 @@ EMS Mode When Grid Charge Is Inactive: Auto
 **Behavior:**
 - At 0.09 €/kWh with the enable switch ON, EMS mode is set to `Battery standby`, then charger current is set to 16A
 - With the enable switch OFF, grid charge will not start even if the price is cheap
-- If the price rises above 0.10 €/kWh while the enable switch is ON, charger current is set to 0A, EMS mode is set to `Auto`, and the enable switch is turned OFF
-- While the enable switch is OFF, grid charge leaves charger current unchanged so solar charging can keep adjusting it
+- If the price rises above 0.10 €/kWh while grid charging is active, charger current is set to 0A and EMS mode is set to `Auto`
+- While grid charge is inactive, it leaves charger current unchanged so solar charging can keep adjusting it
 
 ---
 
@@ -274,11 +274,11 @@ The formula adds back the charger's current draw because the grid export sensor 
 ```
 charge_allowed = enable_switch_on and current_price <= maximum_energy_price
 active: set EMS mode to Battery standby, then set charger current to maximum_current
-stop active session: set charger current to 0, set EMS mode to Auto, then turn enable switch off
-inactive with enable switch off: leave charger current unchanged
+stop active session: set charger current to 0, then set EMS mode to Auto
+inactive: leave charger current unchanged
 ```
 
-The grid charge blueprint no longer calculates household load or import headroom. It is a price gate plus EMS mode control, and the enable switch is the single helper used to start and track one grid-charge session.
+The grid charge blueprint no longer calculates household load or import headroom. It is a price gate plus EMS mode control, and the enable switch is the only helper required.
 
 ---
 

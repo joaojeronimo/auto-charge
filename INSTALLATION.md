@@ -125,7 +125,7 @@ When the solar charge switch is turned off, the blueprint sets the charger curre
    - **EMS Mode When Grid Charge Is Inactive**: Usually `Auto`
 4. Click **"Save"** and give it a name
 
-The grid charge enable switch starts one grid-charge session and also tracks whether that session is active. When it is OFF, cheap prices will not start grid charging and the grid automation leaves the charger current unchanged. When the price rises above your threshold, the automation sets charger current to `0`, restores EMS mode to `Auto`, and turns the enable switch OFF.
+The grid charge enable switch is the only helper this blueprint needs. When it is ON, cheap prices can start grid charging. When it is OFF, cheap prices will not start grid charging. The automation uses the configured active EMS mode to detect whether grid charging is currently active; if the price rises above your threshold during an active grid-charge session, it sets charger current to `0` and restores EMS mode to `Auto`.
 
 ### Configure Battery Discharge Power Toggle
 
