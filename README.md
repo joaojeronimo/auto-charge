@@ -27,9 +27,9 @@ Adjusts charging current in real-time based on available solar export:
 ### Grid Charge
 Controls grid charging from an energy price threshold:
 - **Energy price control**: Only charges when the current energy price is at or below your configured maximum (€/kWh)
-- **Goodwe battery protection**: Sets EMS mode to `Battery standby` before charging so the house battery is not used to charge the car
+- **Goodwe battery protection**: Sets EMS mode to the configured active option before charging so the house battery is not used to charge the car
 - **Single helper**: Uses only the Grid Charge Enable Switch; active grid-charge sessions are inferred from the configured EMS mode
-- **Cooperative stop behavior**: Stops charger current only when grid charging is active, then restores EMS mode to `Auto`
+- **Cooperative stop behavior**: Stops charger current only when grid charging is active, then restores EMS mode to the configured inactive option
 - **Solar-friendly inactive state**: Leaves charger current untouched while grid charging is inactive, so the solar blueprint can keep adjusting current
 - **Startup sync**: Reapplies the correct current and EMS mode when Home Assistant starts
 
@@ -129,8 +129,8 @@ After setup, you get these sensors (example for Tri-Horária):
    - **Maximum Current**: Current to set while charging is allowed (default: 32A)
    - **Grid Charge Enable Switch**: The `input_boolean` you created above
    - **Goodwe EMS Mode Entity**: Your Goodwe EMS mode select entity
-   - **EMS Mode When Grid Charge Is Active**: `Battery standby`
-   - **EMS Mode When Grid Charge Is Inactive**: `Auto`
+   - **EMS Mode When Grid Charge Is Active**: Usually `backup` for the Home Assistant GoodWe integration
+   - **EMS Mode When Grid Charge Is Inactive**: Usually `general` for the Home Assistant GoodWe integration
 6. Save the automation
 
 ### Setting Up Battery Discharge Power Toggle
@@ -195,11 +195,11 @@ When the enable switch turns OFF or the schedule window ends:
 ```
 On price changes, enable switch changes, Home Assistant start, and every 20 seconds:
 1. If enable switch is ON and energy price ≤ max price:
-   - Set Goodwe EMS mode to Battery standby
+   - Set Goodwe EMS mode to the configured active option
    - Set charger maximum current to the configured Maximum Current
 2. If the price is no longer allowed, price data is unavailable, or the enable switch is turned OFF while grid charging is active:
    - Set charger maximum current to 0
-   - Set Goodwe EMS mode to Auto
+   - Set Goodwe EMS mode to the configured inactive option
 3. If grid charging is inactive:
    - Leave charger maximum current unchanged so solar or other automations can control it
 ```
@@ -216,9 +216,9 @@ See [EXAMPLES.md](EXAMPLES.md) for detailed configuration examples covering sing
 ### Quick Example: Grid Charge
 - **Maximum Energy Price**: 0.10 €/kWh
 - **Maximum Current**: 16A
-- **EMS Active**: Battery standby | **EMS Inactive**: Auto
+- **EMS Active**: backup | **EMS Inactive**: general
 - When price is 0.09 €/kWh and the enable switch is ON, current is set to 16A
-- When price rises above 0.10 €/kWh while grid charging is active, current is set to 0A and EMS mode is set to Auto
+- When price rises above 0.10 €/kWh while grid charging is active, current is set to 0A and EMS mode is set to the inactive option
 - When grid charge is inactive, it leaves the current alone so solar charging can adjust it
 
 ## Compatible Chargers
@@ -245,7 +245,7 @@ Works with any Home Assistant integrated charger that supports dynamic current c
 - Check that the **enable switch** (`input_boolean`) is turned ON
 - Verify the current energy price is at or below your configured maximum
 - Verify the charger accepts `0` as a stop current and your configured active current as a start current
-- Verify the Goodwe EMS options exactly match your select entity options, usually `Battery standby` and `Auto`
+- Verify the Goodwe EMS options exactly match your select entity options. The Home Assistant GoodWe integration usually uses `backup` and `general`.
 
 ### Too much oscillation?
 - For solar charging, increase **Power Buffer** (e.g., 200-500W)

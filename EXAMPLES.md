@@ -112,14 +112,14 @@ Maximum Current Control: number.charger_charging_current
 Maximum Current: 16
 Grid Charge Enable Switch: input_boolean.grid_charge_enable
 Goodwe EMS Mode Entity: select.goodwe_ems_mode
-EMS Mode When Grid Charge Is Active: Battery standby
-EMS Mode When Grid Charge Is Inactive: Auto
+EMS Mode When Grid Charge Is Active: backup
+EMS Mode When Grid Charge Is Inactive: general
 ```
 
 **Behavior:**
-- At 0.09 €/kWh with the enable switch ON, EMS mode is set to `Battery standby`, then charger current is set to 16A
+- At 0.09 €/kWh with the enable switch ON, EMS mode is set to `backup`, then charger current is set to 16A
 - With the enable switch OFF, grid charge will not start even if the price is cheap
-- If the price rises above 0.10 €/kWh while grid charging is active, charger current is set to 0A and EMS mode is set to `Auto`
+- If the price rises above 0.10 €/kWh while grid charging is active, charger current is set to 0A and EMS mode is set to `general`
 - While grid charge is inactive, it leaves charger current unchanged so solar charging can keep adjusting it
 
 ---
@@ -135,8 +135,8 @@ Maximum Current Control: number.wallbox_max_current
 Maximum Current: 32
 Grid Charge Enable Switch: input_boolean.grid_charge_enable
 Goodwe EMS Mode Entity: select.goodwe_ems_mode
-EMS Mode When Grid Charge Is Active: Battery standby
-EMS Mode When Grid Charge Is Inactive: Auto
+EMS Mode When Grid Charge Is Active: backup
+EMS Mode When Grid Charge Is Inactive: general
 ```
 
 ---
@@ -152,8 +152,8 @@ Maximum Current Control: number.ev_max_current
 Maximum Current: 10
 Grid Charge Enable Switch: input_boolean.grid_charge_enable
 Goodwe EMS Mode Entity: select.goodwe_ems_mode
-EMS Mode When Grid Charge Is Active: Battery standby
-EMS Mode When Grid Charge Is Inactive: Auto
+EMS Mode When Grid Charge Is Active: backup
+EMS Mode When Grid Charge Is Inactive: general
 ```
 
 ---
@@ -273,8 +273,8 @@ The formula adds back the charger's current draw because the grid export sensor 
 ### Grid Charge
 ```
 charge_allowed = enable_switch_on and current_price <= maximum_energy_price
-active: set EMS mode to Battery standby, then set charger current to maximum_current
-stop active session: set charger current to 0, then set EMS mode to Auto
+active: set EMS mode to the configured active option, then set charger current to maximum_current
+stop active session: set charger current to 0, then set EMS mode to the configured inactive option
 inactive: leave charger current unchanged
 ```
 

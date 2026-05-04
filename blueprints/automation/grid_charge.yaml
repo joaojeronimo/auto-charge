@@ -2,9 +2,9 @@ blueprint:
   name: Grid Charge
   description: |
     Enables EV grid charging only while the current energy price is at or below a configurable maximum.
-    - Starts charging by setting Goodwe EMS mode to Battery standby before raising charger maximum current
+    - Starts charging by setting Goodwe EMS mode to the configured active option before raising charger maximum current
     - Stops grid charging when the price rises above the maximum, the price sensor is unavailable, or the enable switch is turned off
-    - Stops active grid-charge sessions by setting charger maximum current to 0, then setting Goodwe EMS mode back to Auto
+    - Stops active grid-charge sessions by setting charger maximum current to 0, then setting Goodwe EMS mode to the configured inactive option
     - Leaves charger current untouched while inactive so solar or other automations can control it
   domain: automation
   source_url: https://github.com/yourusername/auto-charge
@@ -63,17 +63,55 @@ blueprint:
 
     ems_mode_active_option:
       name: EMS Mode When Grid Charge Is Active
-      description: Option to set when grid charge is enabled
-      default: "Battery standby"
+      description: >
+        Option to set when grid charge is enabled. For the Home Assistant GoodWe integration this is usually "backup".
+        Older "Battery standby" values are mapped to "backup" when that option exists.
+      default: "backup"
       selector:
-        text:
+        select:
+          mode: dropdown
+          custom_value: true
+          options:
+            - label: "General"
+              value: "general"
+            - label: "Backup"
+              value: "backup"
+            - label: "Eco"
+              value: "eco"
+            - label: "Eco charge"
+              value: "eco_charge"
+            - label: "Eco discharge"
+              value: "eco_discharge"
+            - label: "Peak shaving"
+              value: "peak_shaving"
+            - label: "Off-grid"
+              value: "off_grid"
 
     ems_mode_inactive_option:
       name: EMS Mode When Grid Charge Is Inactive
-      description: Option to set when grid charge is disabled
-      default: "Auto"
+      description: >
+        Option to set when grid charge is disabled. For the Home Assistant GoodWe integration this is usually "general".
+        Older "Auto" values are mapped to "general" when that option exists.
+      default: "general"
       selector:
-        text:
+        select:
+          mode: dropdown
+          custom_value: true
+          options:
+            - label: "General"
+              value: "general"
+            - label: "Backup"
+              value: "backup"
+            - label: "Eco"
+              value: "eco"
+            - label: "Eco charge"
+              value: "eco_charge"
+            - label: "Eco discharge"
+              value: "eco_discharge"
+            - label: "Peak shaving"
+              value: "peak_shaving"
+            - label: "Off-grid"
+              value: "off_grid"
 
 variables:
   cfg_max_current: !input max_current
@@ -107,18 +145,64 @@ action:
       current_entity_ready: "{{ states(max_current_entity_id) not in ['unavailable', 'unknown', 'none'] }}"
       ems_mode_entity_ready: >
         {{ states(ems_mode_entity_id) not in ['unavailable', 'unknown', 'none'] }}
+      ems_mode_options: "{{ state_attr(ems_mode_entity_id, 'options') | default([], true) }}"
       current_max_amps: "{{ states(max_current_entity_id) | float(0) }}"
 
   - variables:
+      resolved_ems_mode_active_option: >-
+        {%- set requested = cfg_ems_mode_active_option | string | trim -%}
+        {%- set requested_normalized = requested | lower -%}
+        {%- set ns = namespace(value='') -%}
+        {%- for option in ems_mode_options -%}
+          {%- if option | string | trim | lower == requested_normalized -%}
+            {%- set ns.value = option -%}
+          {%- endif -%}
+        {%- endfor -%}
+        {%- if ns.value != '' -%}
+          {{ ns.value }}
+        {%- elif requested_normalized in ['battery standby', 'battery_standby', 'standby', 'standby mode'] and 'backup' in ems_mode_options -%}
+          backup
+        {%- elif requested_normalized == 'auto' and 'general' in ems_mode_options -%}
+          general
+        {%- else -%}
+          {{ requested }}
+        {%- endif -%}
+      resolved_ems_mode_inactive_option: >-
+        {%- set requested = cfg_ems_mode_inactive_option | string | trim -%}
+        {%- set requested_normalized = requested | lower -%}
+        {%- set ns = namespace(value='') -%}
+        {%- for option in ems_mode_options -%}
+          {%- if option | string | trim | lower == requested_normalized -%}
+            {%- set ns.value = option -%}
+          {%- endif -%}
+        {%- endfor -%}
+        {%- if ns.value != '' -%}
+          {{ ns.value }}
+        {%- elif requested_normalized == 'auto' and 'general' in ems_mode_options -%}
+          general
+        {%- elif requested_normalized in ['battery standby', 'battery_standby', 'standby', 'standby mode'] and 'backup' in ems_mode_options -%}
+          backup
+        {%- else -%}
+          {{ requested }}
+        {%- endif -%}
+
+  - variables:
+      ems_mode_active_option_valid: >
+        {{ (resolved_ems_mode_active_option | string) in ems_mode_options }}
+      ems_mode_inactive_option_valid: >
+        {{ (resolved_ems_mode_inactive_option | string) in ems_mode_options }}
       grid_charge_conditions_met: >
         {{ price_sensor_ready | bool(false)
            and states(energy_price_entity) | float(999999) <= cfg_max_energy_price | float(0)
            and current_entity_ready | bool(false)
            and enable_switch_ready | bool(false)
-           and ems_mode_entity_ready | bool(false) }}
+           and ems_mode_entity_ready | bool(false)
+           and ems_mode_active_option_valid | bool(false)
+           and ems_mode_inactive_option_valid | bool(false) }}
       grid_charge_session_active: >
         {{ ems_mode_entity_ready | bool(false)
-           and states(ems_mode_entity_id) == (cfg_ems_mode_active_option | string) }}
+           and ems_mode_active_option_valid | bool(false)
+           and states(ems_mode_entity_id) == (resolved_ems_mode_active_option | string) }}
 
   - choose:
       - conditions:
@@ -132,18 +216,24 @@ action:
                   - condition: template
                     value_template: >
                       {{ (ems_mode_entity_ready | bool(false))
-                         and (states(ems_mode_entity_id) != (cfg_ems_mode_active_option | string)) }}
+                         and (ems_mode_active_option_valid | bool(false))
+                         and (states(ems_mode_entity_id) != (resolved_ems_mode_active_option | string)) }}
                 sequence:
                   - service: select.select_option
                     target:
                       entity_id: !input ems_mode_entity
                     data:
-                      option: "{{ cfg_ems_mode_active_option }}"
+                      option: "{{ resolved_ems_mode_active_option }}"
+          - wait_template: >
+              {{ states(ems_mode_entity_id) == (resolved_ems_mode_active_option | string) }}
+            timeout: "00:00:15"
+            continue_on_timeout: true
           - choose:
               - conditions:
                   - condition: template
                     value_template: >
                       {{ (current_entity_ready | bool(false))
+                         and states(ems_mode_entity_id) == (resolved_ems_mode_active_option | string)
                          and current_max_amps | float(0) != cfg_max_current | float(0) }}
                 sequence:
                   - service: number.set_value
@@ -174,18 +264,20 @@ action:
                     value_template: >
                       {{ (ems_mode_entity_ready | bool(false))
                          and (current_entity_ready | bool(false))
-                         and (states(ems_mode_entity_id) != (cfg_ems_mode_inactive_option | string)) }}
+                         and (ems_mode_inactive_option_valid | bool(false))
+                         and (states(ems_mode_entity_id) != (resolved_ems_mode_inactive_option | string)) }}
                 sequence:
                   - service: select.select_option
                     target:
                       entity_id: !input ems_mode_entity
                     data:
-                      option: "{{ cfg_ems_mode_inactive_option }}"
+                      option: "{{ resolved_ems_mode_inactive_option }}"
           - wait_template: >
               {{ states(max_current_entity_id) not in ['unavailable', 'unknown', 'none']
                  and states(ems_mode_entity_id) not in ['unavailable', 'unknown', 'none']
                  and states(max_current_entity_id) | float(999999) == 0
-                 and states(ems_mode_entity_id) == (cfg_ems_mode_inactive_option | string) }}
+                 and (not (ems_mode_inactive_option_valid | bool(false))
+                      or states(ems_mode_entity_id) == (resolved_ems_mode_inactive_option | string)) }}
             timeout: "00:00:15"
             continue_on_timeout: true
 

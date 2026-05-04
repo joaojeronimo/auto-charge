@@ -74,6 +74,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Removed schedule start/end time inputs from Grid Charge (charging is now controlled by enable switch and energy price)
 - Grid Charge now checks the enable switch as a native state condition before starting grid charging
 - Removed the duplicate Grid Charge Active Helper input; active grid-charge sessions are now inferred from the configured EMS mode
+- Grid Charge now defaults to Home Assistant GoodWe select options (`backup`/`general`) and maps older friendly labels to valid select options when possible
 - Grid Charge now leaves charger current unchanged while inactive, allowing Solar Charge Dynamic Current to keep controlling the charger during inactive periods
 - Solar Charge Dynamic Current now sets the charger current to `0` when disabled or when the schedule window ends
 - Solar Charge Dynamic Current now enforces the configured `max_current` immediately instead of waiting on the import debounce path
