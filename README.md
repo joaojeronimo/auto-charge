@@ -212,8 +212,11 @@ Every 20 seconds (during schedule window, if enable switch is ON):
    ELSE IF importing for 20+ seconds → Apply the proportional reduction
    ELSE IF target > current → Raise on the next cycle
 
-When the enable switch turns OFF or the schedule window ends:
+When the enable switch turns OFF during the active solar window or the schedule window ends:
 1. Set charger current to 0
+
+When solar charging is inactive:
+1. Leave charger current unchanged so grid charging or other automations can control it
 ```
 
 ### Grid Charge Logic

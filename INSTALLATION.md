@@ -102,7 +102,7 @@ Before configuring the blueprints that use dashboard toggles, create `input_bool
 6. If you want the battery toggle, create another helper such as **"Battery Discharge Hold"**
 
 These toggle switches let you turn each charging mode on and off independently. You can add them to your dashboard for easy access.
-When the solar charge switch is turned off, the blueprint sets the charger current to `0`.
+When the solar charge switch is turned off during the active solar schedule, the blueprint sets the charger current to `0`.
 The battery preservation blueprint does not need an `input_boolean`; disabling the automation itself stops it from managing the max charge limit.
 
 ### Configure Solar Charge Dynamic Current
