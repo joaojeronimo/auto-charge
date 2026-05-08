@@ -65,7 +65,7 @@ blueprint:
       name: EMS Mode When Grid Charge Is Active
       description: >
         Option to set when grid charge is enabled. For the Home Assistant GoodWe integration this is usually "backup".
-        Older "Battery standby" values are mapped to "backup" when that option exists.
+        Aliases such as "Battery standby", "Battery idle", "Standby", and "Idle" are matched to the actual option exposed by the select entity.
       default: "backup"
       selector:
         select:
@@ -76,6 +76,8 @@ blueprint:
               value: "general"
             - label: "Backup"
               value: "backup"
+            - label: "Battery standby / idle"
+              value: "battery_standby"
             - label: "Eco"
               value: "eco"
             - label: "Eco charge"
@@ -91,7 +93,7 @@ blueprint:
       name: EMS Mode When Grid Charge Is Inactive
       description: >
         Option to set when grid charge is disabled. For the Home Assistant GoodWe integration this is usually "general".
-        Older "Auto" values are mapped to "general" when that option exists.
+        "Auto" and "General" are matched to the actual option exposed by the select entity.
       default: "general"
       selector:
         select:
@@ -100,6 +102,8 @@ blueprint:
           options:
             - label: "General"
               value: "general"
+            - label: "Auto"
+              value: "auto"
             - label: "Backup"
               value: "backup"
             - label: "Eco"
@@ -156,37 +160,53 @@ action:
   - variables:
       resolved_ems_mode_active_option: >-
         {%- set requested = cfg_ems_mode_active_option | string | trim -%}
-        {%- set requested_normalized = requested | lower -%}
+        {%- set requested_key = requested | lower | replace('_', ' ') | replace('-', ' ') | replace(' mode', '') | trim -%}
+        {%- set aliases = ['backup', 'battery standby', 'battery idle', 'standby', 'idle'] -%}
         {%- set ns = namespace(value='') -%}
         {%- for option in ems_mode_options -%}
-          {%- if option | string | trim | lower == requested_normalized -%}
+          {%- set option_key = option | string | lower | replace('_', ' ') | replace('-', ' ') | replace(' mode', '') | trim -%}
+          {%- if option_key == requested_key -%}
             {%- set ns.value = option -%}
           {%- endif -%}
         {%- endfor -%}
+        {%- if ns.value == '' and requested_key in aliases -%}
+          {%- for alias in aliases -%}
+            {%- for option in ems_mode_options -%}
+              {%- set option_key = option | string | lower | replace('_', ' ') | replace('-', ' ') | replace(' mode', '') | trim -%}
+              {%- if ns.value == '' and option_key == alias -%}
+                {%- set ns.value = option -%}
+              {%- endif -%}
+            {%- endfor -%}
+          {%- endfor -%}
+        {%- endif -%}
         {%- if ns.value != '' -%}
           {{ ns.value }}
-        {%- elif requested_normalized in ['battery standby', 'battery_standby', 'standby', 'standby mode'] and 'backup' in ems_mode_options -%}
-          backup
-        {%- elif requested_normalized == 'auto' and 'general' in ems_mode_options -%}
-          general
         {%- else -%}
           {{ requested }}
         {%- endif -%}
       resolved_ems_mode_inactive_option: >-
         {%- set requested = cfg_ems_mode_inactive_option | string | trim -%}
-        {%- set requested_normalized = requested | lower -%}
+        {%- set requested_key = requested | lower | replace('_', ' ') | replace('-', ' ') | replace(' mode', '') | trim -%}
+        {%- set aliases = ['general', 'auto', 'self use', 'self consumption'] -%}
         {%- set ns = namespace(value='') -%}
         {%- for option in ems_mode_options -%}
-          {%- if option | string | trim | lower == requested_normalized -%}
+          {%- set option_key = option | string | lower | replace('_', ' ') | replace('-', ' ') | replace(' mode', '') | trim -%}
+          {%- if option_key == requested_key -%}
             {%- set ns.value = option -%}
           {%- endif -%}
         {%- endfor -%}
+        {%- if ns.value == '' and requested_key in aliases -%}
+          {%- for alias in aliases -%}
+            {%- for option in ems_mode_options -%}
+              {%- set option_key = option | string | lower | replace('_', ' ') | replace('-', ' ') | replace(' mode', '') | trim -%}
+              {%- if ns.value == '' and option_key == alias -%}
+                {%- set ns.value = option -%}
+              {%- endif -%}
+            {%- endfor -%}
+          {%- endfor -%}
+        {%- endif -%}
         {%- if ns.value != '' -%}
           {{ ns.value }}
-        {%- elif requested_normalized == 'auto' and 'general' in ems_mode_options -%}
-          general
-        {%- elif requested_normalized in ['battery standby', 'battery_standby', 'standby', 'standby mode'] and 'backup' in ems_mode_options -%}
-          backup
         {%- else -%}
           {{ requested }}
         {%- endif -%}
@@ -211,8 +231,7 @@ action:
            and current_entity_ready | bool(false)
            and enable_switch_ready | bool(false)
            and ems_mode_entity_ready | bool(false)
-           and ems_mode_active_option_valid | bool(false)
-           and ems_mode_inactive_option_valid | bool(false) }}
+           and ems_mode_active_option_valid | bool(false) }}
       grid_charge_session_active: >
         {{ (ems_mode_entity_ready | bool(false)
             and ems_mode_active_option_valid | bool(false)
