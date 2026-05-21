@@ -152,7 +152,9 @@ action:
         {{ trigger is defined
            and trigger.id == 'enable_switch_changed'
            and trigger.from_state is not none
-           and trigger.from_state.state == 'on' }}
+           and trigger.from_state.state == 'on'
+           and trigger.to_state is not none
+           and trigger.to_state.state == 'off' }}
       schedule_active: >-
         {% set start = today_at(cfg_schedule_start) %}
         {% set end = today_at(cfg_schedule_end) %}
@@ -171,8 +173,9 @@ action:
                  and solar_charge_enabled | bool(false))
                 or (solar_charge_was_enabled | bool(false)
                     and trigger.to_state is not none
-                    and trigger.to_state.state == 'off'
-                    and schedule_active | bool(false))) }}
+                    and trigger.to_state.state == 'off')
+                or (solar_charge_active | bool(false)
+                    and not power_sensor_ready | bool(false))) }}
   - choose:
       - conditions:
           - condition: template
