@@ -32,7 +32,7 @@ TAR: Final = {
     },
     "tri": {
         "s1": {"ponta": 0.1511, "cheias": 0.0237, "vazio": 0.0092},
-        "s2": {"ponta": 0.0259, "cheias": 0.0406, "vazio": 0.0157},
+        "s2": {"ponta": 0.2591, "cheias": 0.0406, "vazio": 0.0157},
     },
 }
 
