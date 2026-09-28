@@ -4,23 +4,11 @@ Intelligent EV charging automations that maximize solar power usage during the d
 
 ## Features
 
-### Coopernico GO 2.0 Energy Price Integration
-Real-time energy price sensors for Coopernico GO 2.0 indexed tariff (Portugal):
-- **One-click setup**: Install via HACS, add via UI — pick your OMIE sensor and tariff type
-- **Automatic sensors**: Period, Energy, TAR, Total, Total c/ IVA 6%, Total c/ IVA 23%
-- **All tariff types**: Simples, Bi-Horária, Tri-Horária
-- **Semester-aware**: Automatic S1/S2 TAR switching (January-May / June-December)
-- **Summer/winter periods**: Automatic DST detection for tri-horário schedules
-- **Portuguese & English**: Full UI translations
+### Energy Price Integrations
+Auto-Charge works seamlessly with real-time price sensors from dedicated electricity provider integrations:
+- **[Coopernico GO 2.0](https://github.com/joaojeronimo/coopernico-go)**: Real-time price sensors for Coopernico GO 2.0 indexed tariff in Portugal (Simples, Bi-Horária, Tri-Horária).
+- **[SU Eletricidade](https://github.com/joaojeronimo/su-eletricidade)**: Real-time price sensors for SU Eletricidade regulated BTN Tri-Horário tariff in Portugal (Ciclo Diário & Ciclo Semanal).
 
-### SU Eletricidade BTN Tri-Horário Integration
-Real-time energy price sensors for SU Eletricidade regulated tariff (Portugal) are available via the companion [SU Eletricidade repository](https://github.com/joaojeronimo/su-eletricidade):
-- **UI Configuration**: Add via UI — select cycle (Diário or Semanal) and adjust prices if needed
-- **Default BTN rates**: Ponta (0.2495 €/kWh), Cheias (0.1690 €/kWh), Vazio (0.1087 €/kWh)
-- **Automatic sensors**: Period, Total (s/ IVA), Total c/ IVA 6%, Total c/ IVA 23%
-- **Cycle support**: Ciclo Diário and Ciclo Semanal
-- **Summer/winter periods**: Automatic DST detection for official ERSE tri-horário schedules
-- **Portuguese & English**: Full UI translations
 
 
 
@@ -71,26 +59,19 @@ Keeps a battery maximum charge limit lower during a configured time window:
 
 ## Installation
 
-### Coopernico GO 2.0 (via HACS)
+### Energy Price Integrations (via HACS)
 
-1. Add this repository to HACS as a custom repository (Integration category)
-2. Install **Coopernico GO 2.0** from HACS
-3. Restart Home Assistant
-4. Go to **Settings** > **Devices & Services** > **+ Add Integration**
-5. Search for **Coopernico GO**
-6. Select your **OMIE price sensor** and **tariff type** — done!
+Install your electricity provider integration via HACS:
 
-Sensors are created automatically under a "Coopernico GO" device. You can add multiple tariff types by adding the integration again.
+- **[Coopernico GO 2.0](https://github.com/joaojeronimo/coopernico-go)**:
+  1. In HACS, add `https://github.com/joaojeronimo/coopernico-go` as a custom repository (**Integration** category).
+  2. Download **Coopernico GO 2.0** and restart Home Assistant.
+  3. Go to **Settings** > **Devices & Services** > **+ Add Integration** > **Coopernico GO**.
+- **[SU Eletricidade](https://github.com/joaojeronimo/su-eletricidade)**:
+  1. In HACS, add `https://github.com/joaojeronimo/su-eletricidade` as a custom repository (**Integration** category).
+  2. Download **SU Eletricidade** and restart Home Assistant.
+  3. Go to **Settings** > **Devices & Services** > **+ Add Integration** > **SU Eletricidade**.
 
-### SU Eletricidade (via HACS)
-
-1. In HACS, click the top right menu > **Custom repositories**
-2. Add `https://github.com/joaojeronimo/su-eletricidade` with category **Integration**
-3. Download **SU Eletricidade** from HACS and restart Home Assistant
-4. Go to **Settings** > **Devices & Services** > **+ Add Integration** > Search for **SU Eletricidade**
-5. Select your cycle (**Ciclo Diário** or **Ciclo Semanal**) and confirm the prices — done!
-
-Sensors are created automatically under an "SU Eletricidade" device.
 
 
 
