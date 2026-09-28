@@ -14,13 +14,14 @@ Real-time energy price sensors for Coopernico GO 2.0 indexed tariff (Portugal):
 - **Portuguese & English**: Full UI translations
 
 ### SU Eletricidade BTN Tri-Horário Integration
-Real-time energy price sensors for SU Eletricidade regulated tariff (Portugal):
+Real-time energy price sensors for SU Eletricidade regulated tariff (Portugal) are available via the companion [SU Eletricidade repository](https://github.com/joaojeronimo/su-eletricidade):
 - **UI Configuration**: Add via UI — select cycle (Diário or Semanal) and adjust prices if needed
 - **Default BTN rates**: Ponta (0.2495 €/kWh), Cheias (0.1690 €/kWh), Vazio (0.1087 €/kWh)
 - **Automatic sensors**: Period, Total (s/ IVA), Total c/ IVA 6%, Total c/ IVA 23%
 - **Cycle support**: Ciclo Diário and Ciclo Semanal
 - **Summer/winter periods**: Automatic DST detection for official ERSE tri-horário schedules
 - **Portuguese & English**: Full UI translations
+
 
 
 ### Solar Charge Dynamic Current (Daytime)
@@ -81,15 +82,16 @@ Keeps a battery maximum charge limit lower during a configured time window:
 
 Sensors are created automatically under a "Coopernico GO" device. You can add multiple tariff types by adding the integration again.
 
-### SU Eletricidade
+### SU Eletricidade (via HACS)
 
-1. Copy `custom_components/su_eletricidade` into your Home Assistant `config/custom_components/` directory
-2. Restart Home Assistant
-3. Go to **Settings** > **Devices & Services** > **+ Add Integration**
-4. Search for **SU Eletricidade**
+1. In HACS, click the top right menu > **Custom repositories**
+2. Add `https://github.com/joaojeronimo/su-eletricidade` with category **Integration**
+3. Download **SU Eletricidade** from HACS and restart Home Assistant
+4. Go to **Settings** > **Devices & Services** > **+ Add Integration** > Search for **SU Eletricidade**
 5. Select your cycle (**Ciclo Diário** or **Ciclo Semanal**) and confirm the prices — done!
 
 Sensors are created automatically under an "SU Eletricidade" device.
+
 
 
 ### Blueprints
