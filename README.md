@@ -13,6 +13,16 @@ Real-time energy price sensors for Coopernico GO 2.0 indexed tariff (Portugal):
 - **Summer/winter periods**: Automatic DST detection for tri-horário schedules
 - **Portuguese & English**: Full UI translations
 
+### SU Eletricidade BTN Tri-Horário Integration
+Real-time energy price sensors for SU Eletricidade regulated tariff (Portugal):
+- **UI Configuration**: Add via UI — select cycle (Diário or Semanal) and adjust prices if needed
+- **Default BTN rates**: Ponta (0.2495 €/kWh), Cheias (0.1690 €/kWh), Vazio (0.1087 €/kWh)
+- **Automatic sensors**: Period, Total (s/ IVA), Total c/ IVA 6%, Total c/ IVA 23%
+- **Cycle support**: Ciclo Diário and Ciclo Semanal
+- **Summer/winter periods**: Automatic DST detection for official ERSE tri-horário schedules
+- **Portuguese & English**: Full UI translations
+
+
 ### Solar Charge Dynamic Current (Daytime)
 Adjusts charging current in real-time based on available solar export:
 - **Formula**: `Target Amps = (Grid Export + Current Charger Draw - Buffer) / (Voltage x Phases)`
@@ -71,6 +81,17 @@ Keeps a battery maximum charge limit lower during a configured time window:
 
 Sensors are created automatically under a "Coopernico GO" device. You can add multiple tariff types by adding the integration again.
 
+### SU Eletricidade
+
+1. Copy `custom_components/su_eletricidade` into your Home Assistant `config/custom_components/` directory
+2. Restart Home Assistant
+3. Go to **Settings** > **Devices & Services** > **+ Add Integration**
+4. Search for **SU Eletricidade**
+5. Select your cycle (**Ciclo Diário** or **Ciclo Semanal**) and confirm the prices — done!
+
+Sensors are created automatically under an "SU Eletricidade" device.
+
+
 ### Blueprints
 
 See [INSTALLATION.md](INSTALLATION.md) for detailed blueprint setup instructions.
@@ -96,6 +117,18 @@ After setup, you get these sensors (example for Tri-Horária):
 | **Total c/ IVA 23%** | With 23% IVA (beyond 200 kWh/month) |
 
 **Formula**: `Energy = ((OMIE + 0.009) × 1.16) + 0.001` | `Total = Energy + TAR + CS + CR + TSE + IEC`
+
+### SU Eletricidade Sensors
+
+After setup, you get these sensors:
+
+| Sensor | Description | Default BTN Value |
+|--------|-------------|-------------------|
+| **Period** | Current tariff period (Ponta / Cheias / Vazio) | Ponta / Cheias / Vazio |
+| **Total** | Base electricity price before IVA | 0.2495 / 0.1690 / 0.1087 €/kWh |
+| **Total c/ IVA 6%** | Total price with 6% IVA (first 200 kWh/month, ≤ 6.9 kVA) | 0.2645 / 0.1791 / 0.1152 €/kWh |
+| **Total c/ IVA 23%** | Total price with 23% IVA (beyond 200 kWh/month) | 0.3069 / 0.2079 / 0.1337 €/kWh |
+
 
 ### Setting Up Solar Charge Dynamic Current
 

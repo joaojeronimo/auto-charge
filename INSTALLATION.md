@@ -126,7 +126,7 @@ The battery preservation blueprint does not need an `input_boolean`; disabling t
 1. **Settings** > **Automations & Scenes** > **"Create Automation"**
 2. Select **"Use a Blueprint"** > **"Grid Charge"**
 3. Fill in:
-   - **Energy Price Sensor**: Sensor showing current energy price in €/kWh (e.g., `sensor.coopernico_go_total`)
+   - **Energy Price Sensor**: Sensor showing current energy price in €/kWh (e.g., `sensor.coopernico_go_total` or `sensor.su_eletricidade_total_c_iva_23`)
    - **Maximum Energy Price**: Maximum price at which charging is allowed in €/kWh (e.g., `0.10`)
    - **Maximum Current Control**: Your charger's current control (e.g., `number.charger_max_current`)
    - **Maximum Current**: Current to use while grid charging is allowed (e.g., `16` or `32`)
@@ -145,7 +145,7 @@ The grid charge enable switch is the only helper this blueprint needs. When it i
 3. Fill in:
    - **Toggle Helper**: Your battery stop/normal `input_boolean` (e.g., `input_boolean.battery_discharge_hold`)
    - **Discharge Power Entity**: Your inverter's battery discharge power `number` entity (e.g., `number.battery_discharge_power`)
-   - **Electricity Price Sensor**: Your current electricity price sensor (e.g., `sensor.coopernico_go_total`)
+   - **Electricity Price Sensor**: Your current electricity price sensor (e.g., `sensor.coopernico_go_total` or `sensor.su_eletricidade_total_c_iva_23`)
    - **Price Threshold**: If price is at or above this value, discharge is enabled automatically (e.g., `0.10`)
    - **Stopped Discharge Power**: Usually `0`
    - **Normal Discharge Power**: Your usual discharge limit in Watts (e.g., `5000`)
