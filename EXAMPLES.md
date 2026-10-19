@@ -110,6 +110,7 @@ Energy Price Sensor: sensor.coopernico_go_total  # Current price in €/kWh
 Maximum Energy Price: 0.10                       # Charge at or below this price
 Maximum Current Control: number.charger_charging_current
 Maximum Current: 16
+Car Charging Power: sensor.charger_charging_power
 Grid Charge Enable Switch: input_boolean.grid_charge_enable
 Goodwe EMS Mode Entity: select.goodwe_ems_mode
 EMS Mode When Grid Charge Is Active: backup
@@ -119,6 +120,7 @@ EMS Mode When Grid Charge Is Inactive: general
 **Behavior:**
 - At 0.09 €/kWh with the enable switch ON, EMS mode is set to `backup`, then charger current is set to 16A
 - With the enable switch OFF, grid charge will not start even if the price is cheap
+- When the car finishes charging (`Car Charging Power` stays at 0W for 1 minute while charger current is positive), the enable switch is turned OFF, charger current is set to 0A, and EMS mode is set to `general`
 - If the price rises above 0.10 €/kWh while grid charging is active, charger current is set to 0A and EMS mode is set to `general`
 - While grid charge is inactive, it leaves charger current unchanged so solar charging can keep adjusting it
 
@@ -133,6 +135,7 @@ Energy Price Sensor: sensor.coopernico_go_total  # Current price in €/kWh
 Maximum Energy Price: 0.15                       # Higher threshold for fast charging
 Maximum Current Control: number.wallbox_max_current
 Maximum Current: 32
+Car Charging Power: sensor.wallbox_charging_power
 Grid Charge Enable Switch: input_boolean.grid_charge_enable
 Goodwe EMS Mode Entity: select.goodwe_ems_mode
 EMS Mode When Grid Charge Is Active: backup
@@ -150,6 +153,7 @@ Energy Price Sensor: sensor.coopernico_go_total  # Current price in €/kWh
 Maximum Energy Price: 0.08                       # Very low price threshold
 Maximum Current Control: number.ev_max_current
 Maximum Current: 10
+Car Charging Power: sensor.ev_charging_power
 Grid Charge Enable Switch: input_boolean.grid_charge_enable
 Goodwe EMS Mode Entity: select.goodwe_ems_mode
 EMS Mode When Grid Charge Is Active: backup
@@ -297,7 +301,8 @@ The formula adds back the charger's current draw because the grid export sensor 
 ```
 charge_allowed = enable_switch_on and current_price <= maximum_energy_price
 active: set EMS mode to the configured active option, then set charger current to maximum_current
-stop active session: set charger current to 0, then set EMS mode to the configured inactive option
+stop when car finishes charging (current > 0 and car_charging_power == 0 for 1m): turn enable_switch off, set charger current to 0, then set EMS mode to the configured inactive option
+stop active session (price > max or enable_switch off): set charger current to 0, then set EMS mode to the configured inactive option
 inactive: leave charger current unchanged
 ```
 

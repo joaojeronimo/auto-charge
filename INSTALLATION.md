@@ -130,13 +130,14 @@ The battery preservation blueprint does not need an `input_boolean`; disabling t
    - **Maximum Energy Price**: Maximum price at which charging is allowed in €/kWh (e.g., `0.10`)
    - **Maximum Current Control**: Your charger's current control (e.g., `number.charger_max_current`)
    - **Maximum Current**: Current to use while grid charging is allowed (e.g., `16` or `32`)
+   - **Car Charging Power**: Sensor showing the current power being used to charge the car (e.g., `sensor.charger_power`)
    - **Grid Charge Enable Switch**: The `input_boolean` you created above (e.g., `input_boolean.grid_charge_enable`)
    - **Goodwe EMS Mode Entity**: Your Goodwe EMS mode select entity (e.g., `select.goodwe_ems_mode`)
    - **EMS Mode When Grid Charge Is Active**: Usually `backup` for the Home Assistant GoodWe integration
    - **EMS Mode When Grid Charge Is Inactive**: Usually `general` for the Home Assistant GoodWe integration
 4. Click **"Save"** and give it a name
 
-The grid charge enable switch is the only helper this blueprint needs. When it is ON, cheap prices can start grid charging. When it is OFF, cheap prices will not start grid charging. The automation uses the configured active EMS mode to detect whether grid charging is currently active; if the price rises above your threshold during an active grid-charge session, it sets charger current to `0` and restores EMS mode to the configured inactive option.
+The grid charge enable switch is the only helper this blueprint needs. When it is ON, cheap prices can start grid charging. When it is OFF, cheap prices will not start grid charging. The automation uses the configured active EMS mode and charger current to detect whether grid charging is currently active; if the price rises above your threshold during an active grid-charge session, it sets charger current to `0` and restores EMS mode to the configured inactive option. If the car finishes charging (`Car Charging Power` stays at `0W` for 1 minute while charging current is positive), it turns the enable switch OFF, sets charger current to `0`, and restores EMS mode to the configured inactive option.
 
 ### Configure Battery Discharge Power Toggle
 

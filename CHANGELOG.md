@@ -71,6 +71,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Renamed "Nightly Charge Dynamic Current" blueprint to **"Grid Charge"** (`grid_charge.yaml`)
 - Added **Energy Price Sensor** input — sensor showing current energy price in €/kWh
 - Added **Maximum Energy Price** input — configurable price cap for charging (default: 0.10 €/kWh)
+- Added **Car Charging Power** input to Grid Charge — stops the charging session (turns off the enable switch, sets max current to `0`, and restores EMS mode to the inactive option) when charging current is positive but car charging power stays at `0W` for 1 minute
 - Removed schedule start/end time inputs from Grid Charge (charging is now controlled by enable switch and energy price)
 - Grid Charge now checks the enable switch as a native state condition before starting grid charging
 - Removed the duplicate Grid Charge Active Helper input; active grid-charge sessions are now inferred from the configured EMS mode

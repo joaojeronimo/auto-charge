@@ -27,7 +27,8 @@ Adjusts charging current in real-time based on available solar export:
 Controls grid charging from an energy price threshold:
 - **Energy price control**: Only charges when the current energy price is at or below your configured maximum (€/kWh)
 - **Goodwe battery protection**: Sets EMS mode to the configured active option before charging so the house battery is not used to charge the car
-- **Single helper**: Uses only the Grid Charge Enable Switch; active grid-charge sessions are inferred from the configured EMS mode
+- **Single helper**: Uses only the Grid Charge Enable Switch; active grid-charge sessions are inferred from the configured EMS mode and charger current
+- **Automatic completion stop**: Stops grid charging and turns off the Grid Charge Enable Switch when charging current is positive but car charging power stays at `0W` for 1 minute
 - **Cooperative stop behavior**: Stops charger current only when grid charging is active, then restores EMS mode to the configured inactive option
 - **Solar-friendly inactive state**: Leaves charger current untouched while grid charging is inactive, so the solar blueprint can keep adjusting current
 - **Startup sync**: Reapplies the correct current and EMS mode when Home Assistant starts
@@ -152,6 +153,7 @@ After setup, you get these sensors:
    - **Maximum Energy Price**: Maximum price at which charging is allowed (default: 0.10 €/kWh)
    - **Maximum Current Control**: Your charger's current control (number entity)
    - **Maximum Current**: Current to set while charging is allowed (default: 32A)
+   - **Car Charging Power**: Sensor showing the current power being used to charge the car (in W or kW)
    - **Grid Charge Enable Switch**: The `input_boolean` you created above
    - **Goodwe EMS Mode Entity**: Your Goodwe EMS mode select entity
    - **EMS Mode When Grid Charge Is Active**: Usually `backup` for the Home Assistant GoodWe integration
@@ -202,6 +204,7 @@ After setup, you get these sensors:
 ### For Grid Charge:
 - An **energy price sensor** showing the current price in €/kWh
 - A **number entity** that controls max charging current
+- A **car charging power sensor** showing current EV charging power
 - An **`input_boolean` helper** to enable/disable grid charging
 - A **Goodwe EMS mode `select` entity**
 - Charger must support setting current to `0` to stop charging
@@ -237,14 +240,18 @@ When solar charging is inactive:
 
 ### Grid Charge Logic
 ```
-On price changes, enable switch changes, Home Assistant start, and every 20 seconds:
+On price changes, enable switch changes, car charging power changes, Home Assistant start, and every 20 seconds:
 1. If enable switch is ON and energy price ≤ max price:
    - Set Goodwe EMS mode to the configured active option
    - Set charger maximum current to the configured Maximum Current
-2. If the price is no longer allowed, price data is unavailable, or the enable switch is turned OFF while grid charging is active:
+2. If the car stops taking charge (charging current > 0 and car charging power stays at 0 for 1 minute) while grid charging is active:
+   - Turn the Grid Charge Enable Switch OFF
    - Set charger maximum current to 0
    - Set Goodwe EMS mode to the configured inactive option
-3. If grid charging is inactive:
+3. If the price is no longer allowed, price data is unavailable, or the enable switch is turned OFF while grid charging is active:
+   - Set charger maximum current to 0
+   - Set Goodwe EMS mode to the configured inactive option
+4. If grid charging is inactive:
    - Leave charger maximum current unchanged so solar or other automations can control it
 ```
 
@@ -271,6 +278,7 @@ See [EXAMPLES.md](EXAMPLES.md) for detailed configuration examples covering sing
 - **Maximum Current**: 16A
 - **EMS Active**: backup | **EMS Inactive**: general
 - When price is 0.09 €/kWh and the enable switch is ON, current is set to 16A
+- When the car finishes charging (`Car Charging Power` stays at 0W for 1 minute while current is positive), the enable switch is turned OFF, current is set to 0A, and EMS mode is set to the inactive option
 - When price rises above 0.10 €/kWh while grid charging is active, current is set to 0A and EMS mode is set to the inactive option
 - When grid charge is inactive, it leaves the current alone so solar charging can adjust it
 

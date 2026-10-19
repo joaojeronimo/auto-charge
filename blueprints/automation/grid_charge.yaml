@@ -3,7 +3,8 @@ blueprint:
   description: |
     Enables EV grid charging only while the current energy price is at or below a configurable maximum.
     - Starts charging by setting Goodwe EMS mode to the configured active option before raising charger maximum current
-    - Stops grid charging when the price rises above the maximum, the price sensor is unavailable, or the enable switch is turned off
+    - Stops grid charging when the price rises above the maximum, the price sensor is unavailable, the car stops taking charge, or the enable switch is turned off
+    - When stopped because the car finished charging, turns the enable switch off so charging does not immediately restart
     - Stops active grid-charge sessions by setting charger maximum current to 0, then setting Goodwe EMS mode to the configured inactive option
     - Leaves charger current untouched while inactive so solar or other automations can control it
   domain: automation
@@ -44,6 +45,13 @@ blueprint:
           max: 32
           step: 1
           unit_of_measurement: "A"
+
+    car_charging_power:
+      name: Car Charging Power
+      description: Sensor that shows the current power being used to charge the car (in W or kW)
+      selector:
+        entity:
+          domain: sensor
 
     enable_switch:
       name: Grid Charge Enable Switch
@@ -120,6 +128,7 @@ blueprint:
 variables:
   cfg_max_current: !input max_current
   max_current_entity_id: !input max_current_entity
+  car_charging_power_entity: !input car_charging_power
   enable_switch_entity: !input enable_switch
   energy_price_entity: !input energy_price_sensor
   cfg_max_energy_price: !input max_energy_price
@@ -137,6 +146,12 @@ trigger:
   - id: "price_changed"
     platform: state
     entity_id: !input energy_price_sensor
+  - id: "car_stopped_charging"
+    platform: numeric_state
+    entity_id: !input car_charging_power
+    below: 0.001
+    for:
+      minutes: 1
   - id: "homeassistant_started"
     platform: homeassistant
     event: start
@@ -145,19 +160,30 @@ action:
   - variables:
       enable_switch_ready: "{{ states(enable_switch_entity) not in ['unavailable', 'unknown', 'none'] }}"
       grid_charge_enabled: "{{ states(enable_switch_entity) == 'on' }}"
-      grid_charge_was_enabled: >
-        {{ trigger is defined
-           and trigger.id == 'switch_toggled'
-           and trigger.from_state is not none
-           and trigger.from_state.state == 'on'
-           and trigger.to_state is not none
-           and trigger.to_state.state == 'off' }}
       price_sensor_ready: "{{ states(energy_price_entity) not in ['unavailable', 'unknown', 'none'] }}"
       current_entity_ready: "{{ states(max_current_entity_id) not in ['unavailable', 'unknown', 'none'] }}"
+      car_charging_power_ready: "{{ states(car_charging_power_entity) not in ['unavailable', 'unknown', 'none'] }}"
       ems_mode_entity_ready: >
         {{ states(ems_mode_entity_id) not in ['unavailable', 'unknown', 'none'] }}
       ems_mode_options: "{{ state_attr(ems_mode_entity_id, 'options') | default([], true) }}"
       current_max_amps: "{{ states(max_current_entity_id) | float(0) }}"
+      car_charging_power_value: "{{ states(car_charging_power_entity) | float(0) }}"
+      enable_switch_last_changed_ts: >
+        {{ as_timestamp(states[enable_switch_entity].last_changed, default=as_timestamp(now()))
+           if (states[enable_switch_entity] is defined and states[enable_switch_entity] is not none)
+           else as_timestamp(now()) }}
+      max_current_last_changed_ts: >
+        {{ as_timestamp(states[max_current_entity_id].last_changed, default=as_timestamp(now()))
+           if (states[max_current_entity_id] is defined and states[max_current_entity_id] is not none)
+           else as_timestamp(now()) }}
+      ems_mode_last_changed_ts: >
+        {{ as_timestamp(states[ems_mode_entity_id].last_changed, default=as_timestamp(now()))
+           if (states[ems_mode_entity_id] is defined and states[ems_mode_entity_id] is not none)
+           else as_timestamp(now()) }}
+      car_power_last_changed_ts: >
+        {{ as_timestamp(states[car_charging_power_entity].last_changed, default=as_timestamp(now()))
+           if (states[car_charging_power_entity] is defined and states[car_charging_power_entity] is not none)
+           else as_timestamp(now()) }}
 
   - variables:
       resolved_ems_mode_active_option: >-
@@ -237,14 +263,29 @@ action:
       grid_charge_session_active: >
         {{ grid_charge_ems_active | bool(false)
            and grid_charge_current_active | bool(false) }}
+      no_charge_since_ts: >
+        {{ [enable_switch_last_changed_ts | float(0),
+            max_current_last_changed_ts | float(0),
+            ems_mode_last_changed_ts | float(0),
+            car_power_last_changed_ts | float(0)] | max }}
+      car_stopped_charging: >
+        {{ grid_charge_session_active | bool(false)
+           and car_charging_power_ready | bool(false)
+           and car_charging_power_value | float(0) < 0.001
+           and (as_timestamp(now()) - (no_charge_since_ts | float(0))) >= 55 }}
       grid_charge_should_start: >
         {{ grid_charge_enabled | bool(false)
-           and grid_charge_conditions_met | bool(false) }}
+           and grid_charge_conditions_met | bool(false)
+           and not (car_stopped_charging | bool(false)) }}
       grid_charge_should_stop: >
-        {{ grid_charge_session_active | bool(false)
-           and (grid_charge_was_enabled | bool(false)
-                or (grid_charge_enabled | bool(false)
-                    and not (price_is_allowed | bool(false)))) }}
+        {{ grid_charge_ems_active | bool(false)
+           and current_entity_ready | bool(false)
+           and (grid_charge_current_active | bool(false)
+                or (ems_mode_inactive_option_valid | bool(false)
+                    and states(ems_mode_entity_id) != (resolved_ems_mode_inactive_option | string)))
+           and (not (grid_charge_enabled | bool(false))
+                or not (price_is_allowed | bool(false))
+                or (car_stopped_charging | bool(false))) }}
 
   - choose:
       - conditions:
@@ -267,16 +308,22 @@ action:
                     data:
                       option: "{{ resolved_ems_mode_active_option }}"
           - wait_template: >
-              {{ states(ems_mode_entity_id) == (resolved_ems_mode_active_option | string) }}
+              {{ states(ems_mode_entity_id) == (resolved_ems_mode_active_option | string)
+                 or states(enable_switch_entity) != 'on'
+                 or states(energy_price_entity) in ['unavailable', 'unknown', 'none']
+                 or states(energy_price_entity) | float(999999) > cfg_max_energy_price | float(0) }}
             timeout: "00:00:15"
             continue_on_timeout: true
           - choose:
               - conditions:
                   - condition: template
                     value_template: >
-                      {{ (current_entity_ready | bool(false))
+                      {{ states(enable_switch_entity) == 'on'
+                         and states(energy_price_entity) not in ['unavailable', 'unknown', 'none']
+                         and states(energy_price_entity) | float(999999) <= cfg_max_energy_price | float(0)
+                         and states(max_current_entity_id) not in ['unavailable', 'unknown', 'none']
                          and states(ems_mode_entity_id) == (resolved_ems_mode_active_option | string)
-                         and current_max_amps | float(0) != cfg_max_current | float(0) }}
+                         and (states(max_current_entity_id) | float(0) - cfg_max_current | float(0)) | abs > 0.001 }}
                 sequence:
                   - service: number.set_value
                     target:
@@ -292,6 +339,19 @@ action:
               - conditions:
                   - condition: template
                     value_template: >
+                      {{ (car_stopped_charging | bool(false))
+                         and states(enable_switch_entity) == 'on' }}
+                sequence:
+                  - service: input_boolean.turn_off
+                    target:
+                      entity_id: !input enable_switch
+                  - wait_template: "{{ states(enable_switch_entity) == 'off' }}"
+                    timeout: "00:00:05"
+                    continue_on_timeout: true
+          - choose:
+              - conditions:
+                  - condition: template
+                    value_template: >
                       {{ (current_entity_ready | bool(false))
                          and current_max_amps | float(0) != 0 }}
                 sequence:
@@ -300,12 +360,26 @@ action:
                       entity_id: !input max_current_entity
                     data:
                       value: 0
+          - wait_template: >
+              {{ (states(max_current_entity_id) not in ['unavailable', 'unknown', 'none']
+                  and states(max_current_entity_id) | float(999999) == 0)
+                 or (not (car_stopped_charging | bool(false))
+                     and states(enable_switch_entity) == 'on'
+                     and states(energy_price_entity) not in ['unavailable', 'unknown', 'none']
+                     and states(energy_price_entity) | float(999999) <= cfg_max_energy_price | float(0)) }}
+            timeout: "00:00:15"
+            continue_on_timeout: true
           - choose:
               - conditions:
                   - condition: template
                     value_template: >
-                      {{ (ems_mode_entity_ready | bool(false))
-                         and (current_entity_ready | bool(false))
+                      {{ (car_stopped_charging | bool(false)
+                          or not (states(enable_switch_entity) == 'on'
+                                  and states(energy_price_entity) not in ['unavailable', 'unknown', 'none']
+                                  and states(energy_price_entity) | float(999999) <= cfg_max_energy_price | float(0)))
+                         and states(max_current_entity_id) not in ['unavailable', 'unknown', 'none']
+                         and states(max_current_entity_id) | float(999999) == 0
+                         and states(ems_mode_entity_id) not in ['unavailable', 'unknown', 'none']
                          and (ems_mode_inactive_option_valid | bool(false))
                          and (states(ems_mode_entity_id) != (resolved_ems_mode_inactive_option | string)) }}
                 sequence:
@@ -314,13 +388,16 @@ action:
                       entity_id: !input ems_mode_entity
                     data:
                       option: "{{ resolved_ems_mode_inactive_option }}"
-          - wait_template: >
-              {{ states(max_current_entity_id) not in ['unavailable', 'unknown', 'none']
-                 and states(ems_mode_entity_id) not in ['unavailable', 'unknown', 'none']
-                 and states(max_current_entity_id) | float(999999) == 0
-                 and (not (ems_mode_inactive_option_valid | bool(false))
-                      or states(ems_mode_entity_id) == (resolved_ems_mode_inactive_option | string)) }}
-            timeout: "00:00:15"
-            continue_on_timeout: true
+                  - wait_template: >
+                      {{ states(ems_mode_entity_id) == (resolved_ems_mode_inactive_option | string)
+                         or (not (car_stopped_charging | bool(false))
+                             and states(enable_switch_entity) == 'on'
+                             and states(energy_price_entity) not in ['unavailable', 'unknown', 'none']
+                             and states(energy_price_entity) | float(999999) <= cfg_max_energy_price | float(0)) }}
+                    timeout: "00:00:15"
+                    continue_on_timeout: true
 
-mode: restart
+mode: queued
+max: 3
+max_exceeded: silent
+
