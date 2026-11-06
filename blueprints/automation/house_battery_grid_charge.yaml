@@ -1,10 +1,12 @@
 blueprint:
   name: House Battery Grid Charge
   description: |
-    Enables house battery grid charging when the energy price, house grid consumption, and battery state of charge are below configurable thresholds.
+    Enables house battery grid charging when the energy price, house grid consumption, and battery state of charge are below configurable thresholds, while accounting for tomorrow's estimated solar production.
     - Uses the same energy price logic as Grid Charge (charges only while current energy price is at or below the maximum price)
-    - Starts charging when the house battery SOC is below the start threshold and house grid consumption is below the consumption threshold
-    - Relies on the inverter to stop charging when the battery reaches its target SOC, and only stops charging early if the energy price rises above the maximum or house grid consumption exceeds the threshold
+    - Skips charging the house battery if tomorrow's estimated solar production is at or above the high solar threshold (default 25 kWh)
+    - If tomorrow's estimated solar production is below the low solar threshold (default 10 kWh), ignores the battery start threshold, sets the maximum fast-charging SoC to 100%, and starts charging whenever price and grid consumption allow it (while battery SoC < 100%)
+    - Otherwise, starts charging when the house battery SoC is below the start threshold and leaves the maximum fast-charging SoC untouched
+    - Relies on the inverter to stop charging when the battery reaches its target SoC, and only stops charging early if the energy price rises above the maximum or house grid consumption exceeds the threshold
   domain: automation
   source_url: https://github.com/yourusername/auto-charge
   input:
@@ -53,7 +55,7 @@ blueprint:
 
     battery_start_threshold:
       name: Battery Start Threshold
-      description: Battery state of charge threshold below which charging starts (in %)
+      description: Battery state of charge threshold below which charging starts (in %) when tomorrow's solar forecast is at or above the low solar threshold
       default: 30
       selector:
         number:
@@ -61,6 +63,50 @@ blueprint:
           max: 100
           step: 1
           unit_of_measurement: "%"
+
+    solar_forecast_tomorrow_sensor:
+      name: Estimated Solar Production Tomorrow Sensor
+      description: Sensor that shows the estimated solar production for the next day (in kWh)
+      default: sensor.energy_production_tomorrow_2
+      selector:
+        entity:
+          domain: sensor
+
+    low_solar_threshold:
+      name: Low Solar Production Threshold
+      description: >
+        If estimated solar production tomorrow is below this threshold (in kWh),
+        the battery start threshold is ignored and the maximum fast-charging SoC is set to 100%.
+      default: 10.0
+      selector:
+        number:
+          min: 0.0
+          max: 50.0
+          step: 0.5
+          unit_of_measurement: "kWh"
+
+    high_solar_threshold:
+      name: High Solar Production Skip Threshold
+      description: >
+        If estimated solar production tomorrow is at or above this threshold (in kWh),
+        the house battery will not be charged from the grid.
+      default: 25.0
+      selector:
+        number:
+          min: 0.0
+          max: 100.0
+          step: 0.5
+          unit_of_measurement: "kWh"
+
+    fast_charging_soc_entity:
+      name: Fast Charging Maximum SoC Entity
+      description: >
+        Number entity that controls the maximum battery fast-charging SoC (in %).
+        Set to 100% when tomorrow's estimated solar production is below the low solar threshold; left untouched otherwise.
+      default: number.goodwe_fast_charging_soc
+      selector:
+        entity:
+          domain: number
 
     battery_charge_switch:
       name: House Battery Charge Switch
@@ -76,6 +122,10 @@ variables:
   cfg_max_grid_consumption: !input max_grid_consumption
   battery_soc_entity: !input battery_soc_sensor
   cfg_battery_start_threshold: !input battery_start_threshold
+  solar_forecast_tomorrow_entity: !input solar_forecast_tomorrow_sensor
+  cfg_low_solar_threshold: !input low_solar_threshold
+  cfg_high_solar_threshold: !input high_solar_threshold
+  fast_charging_soc_entity_id: !input fast_charging_soc_entity
   battery_charge_switch_entity: !input battery_charge_switch
 
 trigger:
@@ -91,6 +141,9 @@ trigger:
   - id: "battery_soc_changed"
     platform: state
     entity_id: !input battery_soc_sensor
+  - id: "solar_forecast_changed"
+    platform: state
+    entity_id: !input solar_forecast_tomorrow_sensor
   - id: "charge_switch_changed"
     platform: state
     entity_id: !input battery_charge_switch
@@ -103,10 +156,14 @@ action:
       price_sensor_ready: "{{ states(energy_price_entity) not in ['unavailable', 'unknown', 'none'] }}"
       grid_consumption_ready: "{{ states(house_grid_consumption_entity) not in ['unavailable', 'unknown', 'none'] }}"
       battery_soc_ready: "{{ states(battery_soc_entity) not in ['unavailable', 'unknown', 'none'] }}"
+      solar_forecast_ready: "{{ states(solar_forecast_tomorrow_entity) not in ['unavailable', 'unknown', 'none'] }}"
+      fast_charging_soc_ready: "{{ states(fast_charging_soc_entity_id) not in ['unavailable', 'unknown', 'none'] }}"
       charge_switch_ready: "{{ states(battery_charge_switch_entity) not in ['unavailable', 'unknown', 'none'] }}"
       current_energy_price: "{{ states(energy_price_entity) | float(999999) }}"
       house_grid_consumption: "{{ states(house_grid_consumption_entity) | float(999999) }}"
       battery_soc: "{{ states(battery_soc_entity) | float(100) }}"
+      solar_forecast_tomorrow: "{{ states(solar_forecast_tomorrow_entity) | float(0) }}"
+      current_fast_charging_soc: "{{ states(fast_charging_soc_entity_id) | float(100) }}"
       charge_switch_active: "{{ states(battery_charge_switch_entity) == 'on' }}"
 
   - variables:
@@ -116,14 +173,25 @@ action:
       grid_consumption_is_allowed: >
         {{ grid_consumption_ready | bool(false)
            and house_grid_consumption | float(999999) < cfg_max_grid_consumption | float(0) }}
+      low_solar_tomorrow: >
+        {{ solar_forecast_ready | bool(false)
+           and solar_forecast_tomorrow | float(0) < cfg_low_solar_threshold | float(10) }}
+      high_solar_tomorrow: >
+        {{ solar_forecast_ready | bool(false)
+           and solar_forecast_tomorrow | float(0) >= cfg_high_solar_threshold | float(25) }}
+      target_fast_charging_soc: >
+        {{ 100.0 if (low_solar_tomorrow | bool(false)) else (current_fast_charging_soc | float(100)) }}
       battery_below_start_threshold: >
         {{ battery_soc_ready | bool(false)
-           and battery_soc | float(100) < cfg_battery_start_threshold | float(0) }}
+           and battery_soc | float(100) < target_fast_charging_soc | float(100)
+           and (low_solar_tomorrow | bool(false)
+                or battery_soc | float(100) < cfg_battery_start_threshold | float(0)) }}
       battery_charge_should_start: >
         {{ charge_switch_ready | bool(false)
            and not (charge_switch_active | bool(false))
            and price_is_allowed | bool(false)
            and grid_consumption_is_allowed | bool(false)
+           and not (high_solar_tomorrow | bool(false))
            and battery_below_start_threshold | bool(false) }}
       battery_charge_should_stop: >
         {{ charge_switch_ready | bool(false)
@@ -132,11 +200,29 @@ action:
                 or not (grid_consumption_is_allowed | bool(false))) }}
 
   - choose:
-      - alias: "Start house battery charging when price, grid consumption, and battery SOC allow it"
+      - alias: "Start house battery charging when price, grid consumption, solar forecast, and battery SOC allow it"
         conditions:
           - condition: template
             value_template: "{{ battery_charge_should_start | bool(false) }}"
         sequence:
+          - choose:
+              - conditions:
+                  - condition: template
+                    value_template: >
+                      {{ low_solar_tomorrow | bool(false)
+                         and fast_charging_soc_ready | bool(false)
+                         and (current_fast_charging_soc | float(0) - 100.0) | abs > 0.001 }}
+                sequence:
+                  - service: number.set_value
+                    target:
+                      entity_id: !input fast_charging_soc_entity
+                    data:
+                      value: 100
+                  - wait_template: >
+                      {{ states(fast_charging_soc_entity_id) not in ['unavailable', 'unknown', 'none']
+                         and (states(fast_charging_soc_entity_id) | float(0) - 100.0) | abs <= 0.001 }}
+                    timeout: "00:00:15"
+                    continue_on_timeout: true
           - service: switch.turn_on
             target:
               entity_id: !input battery_charge_switch
