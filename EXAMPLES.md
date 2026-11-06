@@ -103,7 +103,7 @@ These examples use the **Grid Charge** blueprint for price-gated grid charging. 
 
 ### Example 5: Standard Price-Gated Night Charge
 
-**Scenario:** Cheap overnight rate, charge at 16A while the price is at or below 0.10 €/kWh, and keep the Goodwe battery on standby while charging.
+**Scenario:** Cheap overnight rate, charge at 16A while the price is at or below 0.10 €/kWh, automatically start when the car battery is below 70% and plugged in (while the home battery isn't fast charging), and keep the Goodwe battery on standby while charging.
 
 ```yaml
 Energy Price Sensor: sensor.coopernico_go_total  # Current price in €/kWh
@@ -111,6 +111,10 @@ Maximum Energy Price: 0.10                       # Charge at or below this price
 Maximum Current Control: number.charger_charging_current
 Maximum Current: 16
 Car Charging Power: sensor.charger_charging_power
+Car Battery Sensor: sensor.xpeng_161679_battery
+Auto-Start Car Battery Threshold: 70
+Car Charge Port Sensor: sensor.xpeng_161679_charge_port
+Home Battery Fast Charging Switch: switch.goodwe_fast_charging_switch
 Grid Charge Enable Switch: input_boolean.grid_charge_enable
 Goodwe EMS Mode Entity: select.goodwe_ems_mode
 EMS Mode When Grid Charge Is Active: backup
@@ -118,10 +122,9 @@ EMS Mode When Grid Charge Is Inactive: general
 ```
 
 **Behavior:**
-- At 0.09 €/kWh with the enable switch ON, EMS mode is set to `backup`, then charger current is set to 16A
-- With the enable switch OFF, grid charge will not start even if the price is cheap
-- When the car finishes charging (`Car Charging Power` stays at 0W for 1 minute while charger current is positive), the enable switch is turned OFF, charger current is set to 0A, and EMS mode is set to `general`
-- If the price rises above 0.10 €/kWh while grid charging is active, charger current is set to 0A and EMS mode is set to `general`
+- When the car is plugged in (`Connected`), battery is `< 70%`, the home battery fast charging switch is OFF, and price is ≤ 0.10 €/kWh, the enable switch turns ON automatically, EMS mode is set to `backup`, and charger current is set to 16A
+- Once the enable switch is ON, charging continues past 70% until the car finishes charging (`Car Charging Power` stays at 0W for 1 minute while charger current is positive), at which point the enable switch is turned OFF, charger current is set to 0A, and EMS mode is set to `general`
+- If the price rises above 0.10 €/kWh or the home battery fast charging switch turns ON while grid charging is active, charger current is set to 0A and EMS mode is set to `general`
 - While grid charge is inactive, it leaves charger current unchanged so solar charging can keep adjusting it
 
 ---
@@ -136,6 +139,10 @@ Maximum Energy Price: 0.15                       # Higher threshold for fast cha
 Maximum Current Control: number.wallbox_max_current
 Maximum Current: 32
 Car Charging Power: sensor.wallbox_charging_power
+Car Battery Sensor: sensor.xpeng_161679_battery
+Auto-Start Car Battery Threshold: 70
+Car Charge Port Sensor: sensor.xpeng_161679_charge_port
+Home Battery Fast Charging Switch: switch.goodwe_fast_charging_switch
 Grid Charge Enable Switch: input_boolean.grid_charge_enable
 Goodwe EMS Mode Entity: select.goodwe_ems_mode
 EMS Mode When Grid Charge Is Active: backup
@@ -154,6 +161,10 @@ Maximum Energy Price: 0.08                       # Very low price threshold
 Maximum Current Control: number.ev_max_current
 Maximum Current: 10
 Car Charging Power: sensor.ev_charging_power
+Car Battery Sensor: sensor.xpeng_161679_battery
+Auto-Start Car Battery Threshold: 70
+Car Charge Port Sensor: sensor.xpeng_161679_charge_port
+Home Battery Fast Charging Switch: switch.goodwe_fast_charging_switch
 Grid Charge Enable Switch: input_boolean.grid_charge_enable
 Goodwe EMS Mode Entity: select.goodwe_ems_mode
 EMS Mode When Grid Charge Is Active: backup
@@ -299,10 +310,11 @@ The formula adds back the charger's current draw because the grid export sensor 
 
 ### Grid Charge
 ```
-charge_allowed = enable_switch_on and current_price <= maximum_energy_price
-active: set EMS mode to the configured active option, then set charger current to maximum_current
+auto_enable = enable_switch_off and car_battery < threshold and charge_port == "Connected" and home_battery_fast_charging_off and current_price <= maximum_energy_price
+charge_allowed = (enable_switch_on or auto_enable) and home_battery_fast_charging_off and current_price <= maximum_energy_price
+active: turn enable_switch on (if auto_enable), set EMS mode to the configured active option, then set charger current to maximum_current
 stop when car finishes charging (current > 0 and car_charging_power == 0 for 1m): turn enable_switch off, set charger current to 0, then set EMS mode to the configured inactive option
-stop active session (price > max or enable_switch off): set charger current to 0, then set EMS mode to the configured inactive option
+stop active session (price > max, home_battery_fast_charging_on, or enable_switch off): set charger current to 0, then set EMS mode to the configured inactive option
 inactive: leave charger current unchanged
 ```
 

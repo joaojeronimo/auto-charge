@@ -131,13 +131,17 @@ The battery preservation blueprint does not need an `input_boolean`; disabling t
    - **Maximum Current Control**: Your charger's current control (e.g., `number.charger_max_current`)
    - **Maximum Current**: Current to use while grid charging is allowed (e.g., `16` or `32`)
    - **Car Charging Power**: Sensor showing the current power being used to charge the car (e.g., `sensor.charger_power`)
+   - **Car Battery Sensor**: Sensor showing car battery state of charge in % (default: `sensor.xpeng_161679_battery`)
+   - **Auto-Start Car Battery Threshold**: Battery percentage below which grid charging starts automatically (default: `70%`)
+   - **Car Charge Port Sensor**: Sensor showing charge port connection state, auto-starting when `"Connected"` (default: `sensor.xpeng_161679_charge_port`)
+   - **Home Battery Fast Charging Switch**: Switch indicating when the home battery is fast charging (default: `switch.goodwe_fast_charging_switch`)
    - **Grid Charge Enable Switch**: The `input_boolean` you created above (e.g., `input_boolean.grid_charge_enable`)
    - **Goodwe EMS Mode Entity**: Your Goodwe EMS mode select entity (e.g., `select.goodwe_ems_mode`)
    - **EMS Mode When Grid Charge Is Active**: Usually `backup` for the Home Assistant GoodWe integration
    - **EMS Mode When Grid Charge Is Inactive**: Usually `general` for the Home Assistant GoodWe integration
 4. Click **"Save"** and give it a name
 
-The grid charge enable switch is the only helper this blueprint needs. When it is ON, cheap prices can start grid charging. When it is OFF, cheap prices will not start grid charging. The automation uses the configured active EMS mode and charger current to detect whether grid charging is currently active; if the price rises above your threshold during an active grid-charge session, it sets charger current to `0` and restores EMS mode to the configured inactive option. If the car finishes charging (`Car Charging Power` stays at `0W` for 1 minute while charging current is positive), it turns the enable switch OFF, sets charger current to `0`, and restores EMS mode to the configured inactive option.
+The grid charge enable switch is the only helper this blueprint needs. When the car battery is below the configured threshold (default `70%`), the charge port is `"Connected"`, the home battery fast charging switch is `off`, and the energy price is at or below your threshold, the automation automatically turns the enable switch ON and starts grid charging. You can also turn the enable switch ON manually to start a session above the threshold. While the home battery fast charging switch is `on` or the price rises above your threshold during an active grid-charge session, it sets charger current to `0` and restores EMS mode to the configured inactive option. If the car finishes charging (`Car Charging Power` stays at `0W` for 1 minute while charging current is positive), it turns the enable switch OFF, sets charger current to `0`, and restores EMS mode to the configured inactive option.
 
 ### Configure Battery Discharge Power Toggle
 
