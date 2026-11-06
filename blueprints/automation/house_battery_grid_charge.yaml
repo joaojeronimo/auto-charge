@@ -1,0 +1,179 @@
+blueprint:
+  name: House Battery Grid Charge
+  description: |
+    Enables house battery grid charging when the energy price, house grid consumption, and battery state of charge are below configurable thresholds.
+    - Uses the same energy price logic as Grid Charge (charges only while current energy price is at or below the maximum price)
+    - Starts charging when the house battery SOC is below the start threshold and house grid consumption is below the consumption threshold
+    - Keeps charging until the battery SOC reaches the stop threshold, or stops earlier if the energy price rises above the maximum, house grid consumption reaches or exceeds the threshold, or any required sensor becomes unavailable
+  domain: automation
+  source_url: https://github.com/yourusername/auto-charge
+  input:
+    energy_price_sensor:
+      name: Energy Price Sensor
+      description: Sensor that shows the current energy price (in €/kWh)
+      selector:
+        entity:
+          domain: sensor
+
+    max_energy_price:
+      name: Maximum Energy Price
+      description: Maximum energy price at which house battery charging is allowed (in €/kWh). Charging stops above this price.
+      default: 0.10
+      selector:
+        number:
+          min: 0.0
+          max: 1.0
+          step: 0.01
+          unit_of_measurement: "€/kWh"
+
+    grid_consumption_sensor:
+      name: House Grid Consumption Sensor
+      description: Sensor that shows the current house grid consumption (in kWh)
+      selector:
+        entity:
+          domain: sensor
+
+    max_grid_consumption:
+      name: Maximum House Grid Consumption
+      description: Maximum house grid consumption below which battery charging is allowed (in kWh). Charging stops if consumption reaches or exceeds this value.
+      default: 2.0
+      selector:
+        number:
+          min: 0.0
+          max: 50.0
+          step: 0.1
+          unit_of_measurement: "kWh"
+
+    battery_soc_sensor:
+      name: House Battery SOC Sensor
+      description: Sensor that shows the current house battery state of charge (in %)
+      selector:
+        entity:
+          domain: sensor
+
+    battery_start_threshold:
+      name: Battery Start Threshold
+      description: Battery state of charge threshold below which charging starts (in %)
+      default: 30
+      selector:
+        number:
+          min: 0
+          max: 100
+          step: 1
+          unit_of_measurement: "%"
+
+    battery_stop_threshold:
+      name: Battery Stop Threshold
+      description: Battery state of charge threshold at or above which charging stops (in %)
+      default: 80
+      selector:
+        number:
+          min: 0
+          max: 100
+          step: 1
+          unit_of_measurement: "%"
+
+    battery_charge_switch:
+      name: House Battery Charge Switch
+      description: Switch entity that enables grid/fast charging for the house battery
+      selector:
+        entity:
+          domain: switch
+
+variables:
+  energy_price_entity: !input energy_price_sensor
+  cfg_max_energy_price: !input max_energy_price
+  house_grid_consumption_entity: !input grid_consumption_sensor
+  cfg_max_grid_consumption: !input max_grid_consumption
+  battery_soc_entity: !input battery_soc_sensor
+  cfg_battery_start_threshold: !input battery_start_threshold
+  cfg_battery_stop_threshold: !input battery_stop_threshold
+  battery_charge_switch_entity: !input battery_charge_switch
+
+trigger:
+  - id: "sync"
+    platform: time_pattern
+    seconds: "/20"
+  - id: "price_changed"
+    platform: state
+    entity_id: !input energy_price_sensor
+  - id: "grid_consumption_changed"
+    platform: state
+    entity_id: !input grid_consumption_sensor
+  - id: "battery_soc_changed"
+    platform: state
+    entity_id: !input battery_soc_sensor
+  - id: "charge_switch_changed"
+    platform: state
+    entity_id: !input battery_charge_switch
+  - id: "homeassistant_started"
+    platform: homeassistant
+    event: start
+
+action:
+  - variables:
+      price_sensor_ready: "{{ states(energy_price_entity) not in ['unavailable', 'unknown', 'none'] }}"
+      grid_consumption_ready: "{{ states(house_grid_consumption_entity) not in ['unavailable', 'unknown', 'none'] }}"
+      battery_soc_ready: "{{ states(battery_soc_entity) not in ['unavailable', 'unknown', 'none'] }}"
+      charge_switch_ready: "{{ states(battery_charge_switch_entity) not in ['unavailable', 'unknown', 'none'] }}"
+      current_energy_price: "{{ states(energy_price_entity) | float(999999) }}"
+      house_grid_consumption: "{{ states(house_grid_consumption_entity) | float(999999) }}"
+      battery_soc: "{{ states(battery_soc_entity) | float(100) }}"
+      charge_switch_active: "{{ states(battery_charge_switch_entity) == 'on' }}"
+      effective_stop_threshold: >
+        {{ [cfg_battery_stop_threshold | float(0), cfg_battery_start_threshold | float(0)] | max }}
+
+  - variables:
+      price_is_allowed: >
+        {{ price_sensor_ready | bool(false)
+           and current_energy_price | float(999999) <= cfg_max_energy_price | float(0) }}
+      grid_consumption_is_allowed: >
+        {{ grid_consumption_ready | bool(false)
+           and house_grid_consumption | float(999999) < cfg_max_grid_consumption | float(0) }}
+      battery_below_start_threshold: >
+        {{ battery_soc_ready | bool(false)
+           and battery_soc | float(100) < cfg_battery_start_threshold | float(0) }}
+      battery_reached_stop_threshold: >
+        {{ not (battery_soc_ready | bool(false))
+           or battery_soc | float(100) >= effective_stop_threshold | float(0) }}
+      battery_charge_should_start: >
+        {{ charge_switch_ready | bool(false)
+           and not (charge_switch_active | bool(false))
+           and price_is_allowed | bool(false)
+           and grid_consumption_is_allowed | bool(false)
+           and battery_below_start_threshold | bool(false) }}
+      battery_charge_should_stop: >
+        {{ charge_switch_ready | bool(false)
+           and charge_switch_active | bool(false)
+           and (not (price_is_allowed | bool(false))
+                or not (grid_consumption_is_allowed | bool(false))
+                or battery_reached_stop_threshold | bool(false)) }}
+
+  - choose:
+      - alias: "Start house battery charging when price, grid consumption, and battery SOC allow it"
+        conditions:
+          - condition: template
+            value_template: "{{ battery_charge_should_start | bool(false) }}"
+        sequence:
+          - service: switch.turn_on
+            target:
+              entity_id: !input battery_charge_switch
+          - wait_template: "{{ states(battery_charge_switch_entity) == 'on' }}"
+            timeout: "00:00:15"
+            continue_on_timeout: true
+
+      - alias: "Stop house battery charging when conditions are no longer met"
+        conditions:
+          - condition: template
+            value_template: "{{ battery_charge_should_stop | bool(false) }}"
+        sequence:
+          - service: switch.turn_off
+            target:
+              entity_id: !input battery_charge_switch
+          - wait_template: "{{ states(battery_charge_switch_entity) == 'off' }}"
+            timeout: "00:00:15"
+            continue_on_timeout: true
+
+mode: queued
+max: 3
+max_exceeded: silent
