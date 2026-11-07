@@ -165,6 +165,10 @@ action:
       solar_forecast_tomorrow: "{{ states(solar_forecast_tomorrow_entity) | float(0) }}"
       current_fast_charging_soc: "{{ states(fast_charging_soc_entity_id) | float(100) }}"
       charge_switch_active: "{{ states(battery_charge_switch_entity) == 'on' }}"
+      charge_switch_last_changed_ts: >
+        {{ as_timestamp(states[battery_charge_switch_entity].last_changed, default=0)
+           if (states[battery_charge_switch_entity] is defined and states[battery_charge_switch_entity] is not none)
+           else 0 }}
 
   - variables:
       price_is_allowed: >
@@ -179,13 +183,20 @@ action:
       high_solar_tomorrow: >
         {{ solar_forecast_ready | bool(false)
            and solar_forecast_tomorrow | float(0) >= cfg_high_solar_threshold | float(25) }}
+      already_charged_recently: >
+        {{ (charge_switch_last_changed_ts | float(0)) >= as_timestamp(today_at('00:00:00'))
+           or (as_timestamp(now()) - (charge_switch_last_changed_ts | float(0))) < 64800 }}
       target_fast_charging_soc: >
         {{ 100.0 if (low_solar_tomorrow | bool(false)) else (current_fast_charging_soc | float(100)) }}
+      low_solar_topup_allowed: >
+        {{ low_solar_tomorrow | bool(false)
+           and not (already_charged_recently | bool(false))
+           and battery_soc | float(100) < (target_fast_charging_soc | float(100) - 5.0) }}
       battery_below_start_threshold: >
         {{ battery_soc_ready | bool(false)
            and battery_soc | float(100) < target_fast_charging_soc | float(100)
-           and (low_solar_tomorrow | bool(false)
-                or battery_soc | float(100) < cfg_battery_start_threshold | float(0)) }}
+           and (battery_soc | float(100) < cfg_battery_start_threshold | float(0)
+                or low_solar_topup_allowed | bool(false)) }}
       battery_charge_should_start: >
         {{ charge_switch_ready | bool(false)
            and not (charge_switch_active | bool(false))
